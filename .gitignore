@@ -1,0 +1,45 @@
+# Secrets — never commit keys (organizers scan repositories)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# Models and caches (large, downloaded locally)
+models/
+*.gguf
+*.safetensors
+.cache/
+
+# Data: synthetic only. Raw renders/photos stay local; only manifests and small samples are committed.
+data/raw/
+data/renders/
+data/photos/
+data/locked_test/
+data/**/*.jpg
+data/**/*.jpeg
+data/**/*.png
+data/**/*.heic
+!data/samples/**
+
+# Runtime stores (encrypted case files, audit DB)
+var/
+*.sqlite
+*.db
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
