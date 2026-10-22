@@ -21,6 +21,7 @@ A person signs off every file. Qareena never fills in a field it couldn't read, 
 - **Design brief (5 slides):** [`docs/design-brief/MomenSaeb_KYCDocumentAgent.pdf`](docs/design-brief/MomenSaeb_KYCDocumentAgent.pdf)
 - **Technical design:** [`docs/DESIGN.md`](docs/DESIGN.md). Covers architecture, the evidence loop, calibration, rules, the evaluation protocol, security, the failure-mode catalogue, unexpected inputs, production and the demo.
 - **Decision log:** [`docs/DECISIONS.md`](docs/DECISIONS.md). Records why each major choice was made, and what would change it.
+- **Observed failure modes:** [`docs/FAILURE_MODES.md`](docs/FAILURE_MODES.md). What went wrong in our own runs, what the system now does about it, and what risk remains.
 - **Disclosure:** [`docs/DISCLOSURE.md`](docs/DISCLOSURE.md). Lists every model, tool, data source and AI assistant used.
 - **Research and sources:** [`docs/RESEARCH.md`](docs/RESEARCH.md)
 
