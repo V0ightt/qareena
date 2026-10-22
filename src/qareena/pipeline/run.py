@@ -209,6 +209,8 @@ class Pipeline:
             rec = rules.make_record(doc_type, name, raw, self.rt.catalog)
             ev = rec.evidence
             ev.label_box = labels.label_box.get(name)
+            claimed = labels.claims.get(name, ())
+            ev.ocr_text = " ".join(ocr.lines[j].text for j in claimed) if claimed else None
             if name in recovered:
                 ev.first_raw = recovered[name]
                 rec.add_reason("NOTE_RECOVERED_FROM_CROP")

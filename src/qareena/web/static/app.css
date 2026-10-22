@@ -101,6 +101,8 @@ table.kv td { padding: .3rem .6rem; }
 .field-actions { display: grid; gap: .4rem; margin-block-start: .4rem; }
 .field-actions form.edit { display: flex; flex-wrap: wrap; gap: .4rem; }
 .field-actions form.edit input { flex: 1 1 8rem; }
+.field-actions form.suggest { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; background: #eef3fb; border-radius: 8px; padding: .35rem .5rem; }
+.ocr-text { font-weight: 700; font-size: 1.05rem; }
 .decided-note { color: var(--accept); font-size: .9rem; margin: .3rem 0 0; }
 .viewer { margin: 0; position: sticky; inset-block-start: 1rem; }
 .stage { position: relative; }

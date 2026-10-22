@@ -43,6 +43,7 @@ class Evidence(BaseModel):
     ocr_foreign: bool = False  # the value was found only at another field's label (a field shift)
     box: tuple[float, float, float, float] | None = None  # pixels on the read image
     label_box: tuple[float, float, float, float] | None = None  # the field's printed label, if found
+    ocr_text: str | None = None  # what the OCR read at this field's label (shown to the reviewer)
     first_raw: str | None = None  # the full-page answer, when a crop re-read replaced it
     lp_min: float | None = None
     lp_mean: float | None = None

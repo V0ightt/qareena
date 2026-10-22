@@ -43,6 +43,15 @@
           <p class="decided-note">✔ {{ "تم التأكيد" if f.decision.action == "confirm" else "تم التصحيح إلى: " ~ f.decision.value }}{% if f.decision.note %} · {{ f.decision.note }}{% endif %}</p>
         {% elif f.flagged and not final %}
           <div class="field-actions">
+            {% if rec.evidence.ocr_text and rec.evidence.ocr_text != rec.raw %}
+            <form method="post" action="/review/{{ case.id }}/field" class="suggest">
+              <input type="hidden" name="doc_type" value="{{ d.type }}"><input type="hidden" name="field_name" value="{{ f.name }}">
+              <input type="hidden" name="action" value="edit"><input type="hidden" name="value" value="{{ rec.evidence.ocr_text }}">
+              <input type="hidden" name="note" value="اعتماد قراءة القارئ الثاني بعد مطابقتها بالمقطع">
+              <span>القارئ الثاني قرأ: <bdi class="ocr-text">{{ rec.evidence.ocr_text }}</bdi></span>
+              <button type="submit">اعتماد هذه القراءة</button>
+            </form>
+            {% endif %}
             <form method="post" action="/review/{{ case.id }}/field">
               <input type="hidden" name="doc_type" value="{{ d.type }}"><input type="hidden" name="field_name" value="{{ f.name }}">
               <input type="hidden" name="action" value="confirm">

@@ -201,3 +201,20 @@ def test_images_are_deleted_after_the_retention_window(setup):
     assert store.purge(time.time() + (hours + 1) * 3600) > 0
     assert client.get(f"/review/{case_id}/image/tax_card", headers=AUTH).status_code == 404
     assert store.get(case_id).outcome is not None  # the decision record stays
+
+
+def test_workbench_offers_the_ocr_reading_when_the_readers_disagree(tmp_path):
+    runtime = load_runtime(Settings(_env_file=None, data_dir=tmp_path))
+    certify(runtime)
+    read, printed = base_values(), base_values()
+    read["iq_national_card_front"]["laqab"] = "الجبوي"  # the VLM dropped a letter
+
+    def make_pipeline():
+        return Pipeline(runtime, FakeVlm(read), FakeOcr(printed, runtime.catalog), today=TODAY)
+
+    with TestClient(create_app(runtime, make_pipeline, reviewer_password=PASSWORD)) as client:
+        case_id = upload(client).headers["location"].rsplit("/", 1)[1]
+        wait_done(client, case_id)
+        page = client.get(f"/review/{case_id}", headers=AUTH).text
+        assert "القارئ الثاني قرأ" in page
+        assert "الجبوري" in page  # the OCR's reading, offered as one click
