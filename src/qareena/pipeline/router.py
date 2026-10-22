@@ -17,6 +17,7 @@ RETAKE_REASONS = frozenset(
     {
         "BLUR",
         "GLARE",
+        "FINGER",
         "CUT_CORNER",
         "TOO_FAR",
         "TOO_DARK",

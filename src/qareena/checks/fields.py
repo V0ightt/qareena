@@ -92,10 +92,11 @@ def format_error(value: str, spec: FieldSpec) -> str | None:
             return "DATE_UNPARSEABLE"  # a partial date such as «?1995»
         if not re.fullmatch(_date_shape(fmt), compact):
             return "DATE_FORMAT_DIFFERS"  # not copied as printed, e.g. ISO taken from the MRZ
-    if spec.kind == FieldKind.NAME_PART:
+    if spec.kind in (FieldKind.NAME_PART, FieldKind.TEXT):
         core = arabic.spelling(text).replace(" ", "")
-        if len(core.removeprefix(_ARTICLE)) < 2:
-            return "NAME_TRUNCATED"  # «ال» alone: the rest of the name was not read
+        if arabic.is_arabic_letters(text) and len(core.removeprefix(_ARTICLE)) < 2:
+            # «ال» or «الك» alone: the rest was not read (glare, a finger, the frame edge)
+            return "NAME_TRUNCATED" if spec.kind == FieldKind.NAME_PART else "VALUE_TRUNCATED"
     if spec.kind in (FieldKind.DIGITS, FieldKind.CODE):
         text = text.replace(" ", "").upper()
     if spec.kind == FieldKind.DIGITS and not text.isdigit():

@@ -140,6 +140,16 @@ def place_on_background(
         ox, oy = offset[0] * W, offset[1] * H
     dst = np.float32([[ox, oy], [ox + dw, oy], [ox + dw, oy + dh], [ox, oy + dh]])
     dst = (dst + rng.uniform(-max_shift, max_shift, (4, 2)) * np.float32([dw, dh])).astype(np.float32)
+    if offset is None:  # a whole-document photo: keep every corner clear of the frame after the tilt
+        keep = 0.05 * np.float32([W, H])
+        lo, hi = dst.min(axis=0), dst.max(axis=0)
+        scale = float(min(1.0, *((np.float32([W, H]) - 2 * keep) / np.maximum(hi - lo, 1.0))))
+        centre = (lo + hi) / 2
+        dst = (dst - centre) * scale + centre
+        dst += np.clip(keep - dst.min(axis=0), 0, None) - np.clip(
+            dst.max(axis=0) - (np.float32([W, H]) - keep), 0, None
+        )
+        dst = dst.astype(np.float32)
     src = np.float32([[0, 0], [w, 0], [w, h], [0, h]])
     m = cv2.getPerspectiveTransform(src, dst)
     warped = cv2.warpPerspective(img, m, (W, H), flags=cv2.INTER_LINEAR)
@@ -162,6 +172,47 @@ def camera(img: np.ndarray, rng: np.random.Generator, *, max_blur: float = 1.0) 
     out = np.clip(out, 0, 255).astype(np.uint8)
     sigma = rng.uniform(0.0, max_blur)
     return gaussian_blur(out, sigma) if sigma > 0.3 else out
+
+
+def finger(
+    img: np.ndarray,
+    box: tuple[float, float, float, float],
+    quad: np.ndarray,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    """A finger holding the document: it enters from the nearest document edge and its tip
+    covers part of the field ``box`` (pixels). Returns (image, mask 0..1 where it covers)."""
+    h, w = img.shape[:2]
+    tl, tr, br, bl = (np.float32(p) for p in quad)
+    doc_h = float((np.linalg.norm(bl - tl) + np.linalg.norm(br - tr)) / 2)
+    x0, y0, x1, y1 = box
+    centre = np.float32([(x0 + x1) / 2, (y0 + y1) / 2])
+    edges = {"left": (tl, bl), "right": (tr, br), "bottom": (bl, br)}
+
+    def foot(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+        t_ = float(np.clip(np.dot(centre - a, b - a) / max(float(np.dot(b - a, b - a)), 1e-6), 0, 1))
+        return a + t_ * (b - a)
+
+    entry = min((foot(a, b) for a, b in edges.values()), key=lambda p: float(np.linalg.norm(p - centre)))
+    direction = (centre - entry) / max(float(np.linalg.norm(centre - entry)), 1e-6)
+    reach = float(rng.uniform(0.15, 0.6)) * (x1 - x0)  # how far into the field the tip goes
+    tip = centre - direction * ((x1 - x0) / 2 - reach) if abs(direction[0]) > abs(direction[1]) else centre
+    start = entry - direction * doc_h * 0.6  # the hand is outside the document
+    width = doc_h * float(rng.uniform(0.22, 0.32))
+    mask = np.zeros((h, w), np.float32)
+    cv2.line(mask, tuple(int(v) for v in start), tuple(int(v) for v in tip), 1.0, int(width), cv2.LINE_AA)
+    cv2.circle(mask, tuple(int(v) for v in tip), int(width / 2), 1.0, -1, cv2.LINE_AA)
+    mask = cv2.GaussianBlur(mask, (0, 0), sigmaX=max(1.0, width * 0.04))
+    shadow = np.clip(cv2.GaussianBlur(mask, (0, 0), sigmaX=width * 0.25) * 1.3, 0, 1) * (1 - mask)
+    skin = np.float32(rng.choice([(110, 140, 190), (90, 120, 170), (70, 95, 140), (125, 155, 205)]))
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    shade = 0.82 + 0.18 * np.sin(
+        (xx * direction[1] - yy * direction[0]) / max(width, 1.0) * np.pi
+    )  # rounded look
+    finger_px = skin[None, None, :] * shade[..., None]
+    out = img.astype(np.float32) * (1 - 0.25 * shadow[..., None])
+    out = out * (1 - mask[..., None]) + finger_px * mask[..., None]
+    return np.clip(out, 0, 255).astype(np.uint8), mask
 
 
 def occlude(

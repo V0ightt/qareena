@@ -83,7 +83,7 @@ def load(split_dir: Path, run_dir: Path, catalog: Catalog) -> tuple[list[FieldRo
     rows: list[FieldRow] = []
     packets: list[PacketRow] = []
     for trace_path in sorted(run_dir.glob("*.json")):
-        if trace_path.name == "run.json":
+        if trace_path.stem in ("run", "metrics"):  # the run record and a previous report
             continue
         result = json.loads(trace_path.read_text(encoding="utf-8"))
         truth = json.loads((split_dir / result["packet_id"] / "truth.json").read_text(encoding="utf-8"))

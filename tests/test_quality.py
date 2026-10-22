@@ -111,3 +111,25 @@ def test_tight_crop_with_a_full_width_band_is_not_a_cut_corner():
     img[0:90, :] = (60, 40, 20)
     q = assess(img)
     assert q.reason != "CUT_CORNER"
+
+
+SKIN = (110, 140, 190)  # BGR
+
+
+def test_a_finger_from_the_edge_asks_for_a_retake():
+    img = card()
+    cv2.line(img, (0, 300), (300, 300), SKIN, 120)  # enters from the card's edge, over the text
+    cv2.circle(img, (300, 300), 60, SKIN, -1)
+    assert assess(img).reason == "FINGER"
+
+
+def test_a_face_photo_printed_inside_the_card_is_not_a_finger():
+    img = card()
+    cv2.rectangle(img, (60, 120), (230, 330), SKIN, -1)  # skin-toned, but inset like an ID photo
+    assert assess(img).reason != "FINGER"
+
+
+def test_warm_tinted_paper_is_not_a_finger():
+    img = card()
+    img[(img == (236, 240, 244)).all(axis=2)] = (215, 212, 238)  # pale pink paper under a warm cast
+    assert assess(img).reason != "FINGER"

@@ -81,24 +81,34 @@ CONDITION_WEIGHTS: dict[str, float] = {
     "finger": 0.08,  # photo + a fingertip over one field
     "retake": 0.12,  # photo made to fail the quality gate
 }
-RETAKE_KINDS = ("BLUR", "TOO_DARK", "CUT_CORNER", "TOO_FAR")
+RETAKE_KINDS = ("BLUR", "TOO_DARK", "CUT_CORNER", "TOO_FAR")  # GLARE and FINGER come from their conditions
 LEGIBLE_MAX = 0.05  # ink share covered below which a field must be read
 UNREADABLE_SLICE = 0.5  # a character-sized slice covered beyond this is unreadable
 UNREADABLE_TOTAL = 0.2  # ...as is a field with this share of its ink covered
-COVERED = 0.6  # a mask value above this hides the ink under it
+HIDDEN_AT = {"finger": 0.5, "glare": 0.97}  # mask value from which the ink under it is gone
+TOUCHED_AT = {"finger": 0.2, "glare": 0.5}  # ...from which it is at least degraded
 GLARE_RETAKE = 0.02  # washed-out share of the document beyond which the right answer is a retake
+FINGER_RETAKE = 0.015  # share of the document under a finger beyond which the right answer is a retake
 
 
 # --- labels -------------------------------------------------------------------------------
 
 
-def visibility(ink: np.ndarray, cover: np.ndarray | None) -> tuple[str, float, float]:
-    """(state, covered share of the ink, worst character-sized slice) for one field's ink mask."""
+def visibility(
+    ink: np.ndarray, cover: np.ndarray | None, *, hidden_at: float = 0.5, touched_at: float = 0.2
+) -> tuple[str, float, float]:
+    """(state, hidden share of the ink, worst character-sized slice) for one field's ink mask.
+
+    ``hidden_at``: mask value from which the ink under it is gone (a finger: 0.5; glare: 0.97,
+    because text blended 90% towards white still has ~25 grey levels of contrast and is read).
+    ``touched_at``: from which it is at least degraded, for the ambiguous band.
+    """
     if not ink.any():
         return "absent", 0.0, 0.0
     if cover is None:
         return "legible", 0.0, 0.0
-    hidden = (cover > COVERED) & ink
+    hidden = (cover >= hidden_at) & ink
+    touched = float(((cover >= touched_at) & ink).sum()) / float(ink.sum())
     total = float(hidden.sum()) / float(ink.sum())
     ys, xs = np.nonzero(ink)
     height = int(ys.max() - ys.min() + 1)
@@ -109,7 +119,7 @@ def visibility(ink: np.ndarray, cover: np.ndarray | None) -> tuple[str, float, f
             worst = max(worst, float(hidden[:, x : x + height].sum()) / float(col.sum()))
     if worst > UNREADABLE_SLICE or total > UNREADABLE_TOTAL:
         return "unreadable", total, worst
-    if total < LEGIBLE_MAX:
+    if touched < LEGIBLE_MAX:
         return "legible", total, worst
     return "ambiguous", total, worst
 
@@ -173,7 +183,15 @@ def capture(r: Rendered, condition: str, rng: np.random.Generator, bg_rng: np.ra
             raise RuntimeError(f"no ink for {target}")
         box_f = (float(box[0]), float(box[1]), float(box[2]), float(box[3]))
     if condition == "finger":
-        photo, cover = degrade.occlude(photo, box_f, rng, cover=float(rng.uniform(0.35, 0.9)))
+        photo, cover = degrade.finger(photo, box_f, quad, rng)
+        on_doc = np.zeros(cover.shape, np.uint8)
+        cv2.fillConvexPoly(on_doc, quad.astype(np.int32), 1)
+        share = float(((cover > 0.5) & on_doc.astype(bool)).sum()) / max(
+            cv2.contourArea(quad.astype(np.float32)), 1.0
+        )
+        params["finger_share"] = round(share, 4)
+        if share > FINGER_RETAKE:
+            expected = "FINGER"  # a finger over the document: the gate should ask for another photo
     photo = degrade.camera(photo, rng)
     if condition == "glare":
         photo, cover = degrade.glare_over(photo, box_f, strength=float(rng.uniform(0.9, 1.0)))
@@ -248,7 +266,12 @@ def build_split(
             for k, name in enumerate(rendered.ink_fields):
                 if name.startswith("_"):
                     continue
-                state, total, worst = visibility(cap.ink == k + 1, cap.cover)
+                state, total, worst = visibility(
+                    cap.ink == k + 1,
+                    cap.cover,
+                    hidden_at=HIDDEN_AT.get(cap.condition, 0.5),
+                    touched_at=TOUCHED_AT.get(cap.condition, 0.2),
+                )
                 if cap.expected_quality is not None and state == "legible":
                     state = "ambiguous"  # the gate should stop this photo before anyone reads it
                 fields[name] = {

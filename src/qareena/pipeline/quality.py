@@ -27,6 +27,7 @@ class QualityThresholds:
     max_tilt_deg: float = 25.0
     min_sharpness: float = 60.0  # variance of Laplacian on the rectified card at 1000 px width
     max_glare_frac: float = 0.02  # share of the document that is blown-out highlight
+    max_finger_frac: float = 0.015  # share of the document under a skin-toned blob from its edge
     min_brightness: float = 55.0  # mean grey level 0..255
     max_brightness: float = 240.0
     min_ink_contrast: float = 170.0  # TOO_BRIGHT only if even the darkest 1% (the ink) is paler than this
@@ -73,7 +74,10 @@ def assess(img: np.ndarray, t: QualityThresholds | None = None) -> QualityReport
         metrics["tilt_deg"] = _tilt_deg(quad)
         metrics["doc_long_side_px"] = _long_side(quad)
         if near_edge.any():
-            return QualityReport(False, "CUT_CORNER", metrics, quad, None, tuple(notes))
+            # a hand holding the card reaches the frame and can bend the outline: say "finger"
+            metrics["finger_frac"] = finger_fraction(rectify(img, quad))
+            reason = "FINGER" if metrics["finger_frac"] > t.max_finger_frac else "CUT_CORNER"
+            return QualityReport(False, reason, metrics, quad, None, tuple(notes))
         if area < t.min_area_frac or metrics["doc_long_side_px"] < t.min_doc_long_side_px:
             return QualityReport(False, "TOO_FAR", metrics, quad, None, tuple(notes))
         if metrics["tilt_deg"] > t.max_tilt_deg:
@@ -88,6 +92,7 @@ def assess(img: np.ndarray, t: QualityThresholds | None = None) -> QualityReport
     metrics["brightness"] = float(scaled.mean())
     metrics["ink_p1"] = float(np.percentile(scaled, 1))  # how dark the darkest print still is
     metrics["glare_frac"] = glare_fraction(region)
+    metrics["finger_frac"] = finger_fraction(region)
     rect = region if quad is not None else None
     for reason, failed in (
         ("TOO_DARK", metrics["brightness"] < t.min_brightness),
@@ -95,6 +100,7 @@ def assess(img: np.ndarray, t: QualityThresholds | None = None) -> QualityReport
         ("TOO_BRIGHT", metrics["brightness"] > t.max_brightness and metrics["ink_p1"] > t.min_ink_contrast),
         ("BLUR", metrics["sharpness"] < t.min_sharpness),
         ("GLARE", metrics["glare_frac"] > t.max_glare_frac),
+        ("FINGER", metrics["finger_frac"] > t.max_finger_frac),
     ):
         if failed:
             return QualityReport(False, reason, metrics, quad, rect, tuple(notes))
@@ -116,14 +122,17 @@ def find_document(img: np.ndarray) -> np.ndarray | None:
     frame_area = small.shape[0] * small.shape[1]
 
     quad = _largest_quad(cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0], frame_area)
-    if quad is None:
-        # A document that runs off the frame has no closed outline: the frame edge is its
-        # missing side. Close the outline against the border and look again; a quad found
-        # this way touches the border, which ``assess`` reports as CUT_CORNER.
-        closed = edges.copy()
-        closed[[0, -1], :] = 255
-        closed[:, [0, -1]] = 255
-        quad = _largest_quad(cv2.findContours(closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0], frame_area)
+    # A document that runs off the frame has no closed outline: the frame edge is its missing
+    # side. Close the outline against the border and look again. Keep the larger of the two:
+    # with an open outline the first pass can only find an element *inside* the document (its
+    # photo, its MRZ box), never something bigger. A quad found by closing touches the border,
+    # which ``assess`` reports as CUT_CORNER.
+    closed = edges.copy()
+    closed[[0, -1], :] = 255
+    closed[:, [0, -1]] = 255
+    cut = _largest_quad(cv2.findContours(closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0], frame_area)
+    if cut is not None and (quad is None or cv2.contourArea(cut) > 1.5 * cv2.contourArea(quad)):
+        quad = cut
     return None if quad is None else order_corners(quad / s)
 
 
@@ -199,6 +208,30 @@ def glare_fraction(region: np.ndarray, border_frac: float = 0.03) -> float:
         if ink < GLARE_INK_FRAC:
             blown += area
     return blown / float(mask.size)
+
+
+def finger_fraction(region: np.ndarray) -> float:
+    """Share of the document covered by a skin-toned blob that enters from its border.
+
+    A finger holding the card comes in from outside, so the blob must touch the border; a face
+    photo printed on an ID card is skin-toned too, but sits inside the card. Thin skin-toned
+    print (stamps, red text) is removed by a morphological opening at finger scale.
+    """
+    h, w = region.shape[:2]
+    ycc = cv2.cvtColor(region, cv2.COLOR_BGR2YCrCb)
+    y, cr, cb = ycc[..., 0], ycc[..., 1], ycc[..., 2]
+    sat = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)[..., 1]
+    # skin is clearly saturated (~0.2-0.6); pale paper with a warm camera cast is not (~0.1)
+    skin = ((cr >= 135) & (cr <= 180) & (cb >= 77) & (cb <= 127) & (y >= 40) & (sat >= 51)).astype(np.uint8)
+    k = max(3, round(0.04 * min(h, w)))
+    skin = cv2.morphologyEx(skin, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    n, _, stats, _ = cv2.connectedComponentsWithStats(skin, connectivity=8)
+    best = 0
+    for i in range(1, n):
+        x, yy, bw, bh, area = (int(v) for v in stats[i])
+        if x <= 1 or yy <= 1 or x + bw >= w - 1 or yy + bh >= h - 1:  # touches the border
+            best = max(best, area)
+    return best / float(h * w)
 
 
 def _near_edge(quad: np.ndarray, w: int, h: int, t: QualityThresholds) -> np.ndarray:

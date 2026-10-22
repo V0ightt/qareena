@@ -86,3 +86,10 @@ def test_dates_must_be_whole_and_copied_as_printed(value, spec, expected):
 )
 def test_a_name_part_is_more_than_the_article(value, expected):
     assert format_error(value, NAME) == expected
+
+
+def test_a_text_value_cut_to_the_article_is_truncated():
+    place = FieldSpec(label_ar="p", kind="text")
+    assert format_error("الك", place) == "VALUE_TRUNCATED"  # «الكوت» with a finger over it
+    assert format_error("الكوت", place) is None
+    assert format_error("مديرية البطاقة النموذجية", place) is None
