@@ -43,6 +43,6 @@ Follow `shotlist.csv` row by row: it says which phone (A or B) and which conditi
 
 ## 4. After shooting
 
-- For each photo, click the document's four corners in the labelling tool (to be added). The template's field boxes are projected through those corners, which gives ground-truth boxes for photos too.
+- For each photo, click the document's four corners: `uv run python tools/corner_labeler.py var/photos/<split>`, then open http://127.0.0.1:8770. Click top-left, top-right, bottom-right, bottom-left, as the document reads. The template's field boxes are projected through those corners, which gives ground-truth boxes for photos too.
 - Fill `corners_clicked` in the shot list as you go.
 - Test-A and Test-B photos are sealed (hashed) on 1 Nov, before anyone looks at results on them.
