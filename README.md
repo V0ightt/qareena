@@ -6,9 +6,11 @@ Qareena reads phone photos of a merchant's national ID, business license and tax
 
 | Outcome | Arabic | What happens |
 |---|---|---|
-| ✓ Pre-checked | مطابق | Every critical field is confirmed by two sources. The reviewer approves in one click |
-| ! Needs review | راجع / تأكد | Only the fields that need a decision, each with its crop, score and reason |
+| ✓ Pre-checked | جاهز للموافقة | Every critical field is confirmed by two sources. The reviewer approves in one click |
+| ! Needs review | يحتاج مراجعة | Only the fields that need a decision, each with its crop, score and reason |
 | ↻ Retake | إعادة تصوير | Specific guidance to the applicant in Iraqi Arabic. The file resumes when the new photo arrives |
+
+Each field also carries a calibrated score and an action band: مطابق (matches), تأكد (check) or راجع (decide).
 
 A person signs off every file. Qareena never fills in a field it couldn't read, and it never follows text written inside a document. "Pre-checked" never means "identity verified": face matching, liveness and forgery detection are out of scope.
 
@@ -40,5 +42,5 @@ Everything in the live path runs on one machine. Document images and PII do not 
 ## Ground rules this repo follows
 
 - **Synthetic data only.** All documents are fictional, rendered from our own SPECIMEN templates. No real documents are ever used.
-- **No secrets in git.** Configuration goes in `.env` (see `.env.example`), and CI runs a secret scan.
+- **No secrets in git.** Configuration goes in `.env` (see `.env.example`). A gitleaks secret scan is added to CI on 24 Oct.
 - **Two held-out test sets are sealed by hash** when they are created. Test-A is opened at the MVP; Test-B is opened once, at the progress review.

@@ -44,31 +44,36 @@ The format follows lightweight Architecture Decision Records. New decisions are 
 ## ADR-004 · Decision-critical fields need two agreeing sources
 - **Context.** Field-level and packet-level targets have to be consistent. If each of 20 accepted fields were wrong 2% of the time, about 33% of pre-checked packets would contain an error. Even at 1% with 10 critical fields, it would be about 10%.
 - **Decision.**
-  - About 10 fields per packet are *decision-critical*: the four name parts, ID number, date of birth, ID expiry, trade name, license expiry and tax ID.
+  - About 11 fields per packet are *decision-critical*: the four name parts, ID number, date of birth, ID expiry, trade name, chamber membership number, license expiry and tax ID.
   - A critical field can be auto-accepted only when **two independent sources agree**:
     - front ↔ MRZ, which carries check digits (ID number, DOB, expiry)
     - ID ↔ license ↔ tax card (names, trade name)
-    - VLM ↔ OCR, plus agreement on a zoomed re-read (license number, tax ID)
+    - VLM ↔ OCR, plus agreement on a zoomed re-read (membership number, tax ID)
   - The calibrated threshold for critical fields is certified separately and more strictly than for other fields.
   - Errors in non-critical fields (for example blood type or place of birth) are reported, but they never block a pass on their own.
 - **Revisit if** ZainCash's reviewers name a different set of fields as decisive (interview, week 1).
 
 ## ADR-005 · Threshold by fixed-sequence testing with Clopper–Pearson bounds
-- **Context.** We need a threshold whose error rate among accepted fields holds with high confidence on unseen data, and we have only about 1,000–2,000 calibration fields.
+- **Context.** We need a threshold whose error rate among accepted fields holds with high confidence on unseen data. Labels are cheap for digital packets, but every packet costs GPU time.
 - **Decision.**
   - Scan a pre-registered grid of thresholds from strictest to loosest. At each one, compute the one-sided 95% Clopper–Pearson upper bound on the error among accepted fields in the calibration split.
   - Stop at the first threshold whose bound exceeds α, and use the last one that passed. Fixed-sequence testing (as in Learn-Then-Test) controls the family-wise error without a Bonferroni correction.
   - α is 1% for critical fields and 2% for the others.
   - If no threshold passes, everything goes to a human. That is a valid result.
-- **Honest limit.** About 600 accepted fields with 0 errors certify 0.5%; 2 errors certify about 1.05%. We cannot certify 0.1% with this much data, and we say so.
+- **Honest limit.**
+  - The scorer is fitted on the development split, and calibration (150 packets, ~1,650 critical fields) only certifies τ.
+  - At α = 1%, 1,150 accepted fields tolerate 5 errors, but 600 tolerate only 1.
+  - The grid starts at the strictest τ that still accepts ≥ 300 fields.
+  - The bound is pooled across tiers, so per-tier error is reported, not certified.
+  - We cannot certify 0.1%, and we say so.
 
 ## ADR-006 · Fail fast: test the riskiest assumption on day 1
 - **Context.** The riskiest assumption is that a local model on an 8 GB laptop GPU reads Arabic ID fields well enough, with usable signals (valid JSON, logprobs, OCR agreement), at acceptable latency. Everything else depends on it.
 - **Decision.**
-  - Day 1 is a spike: one quick template, about 20 renders and 5 phone photos.
+  - Day 1 is a spike: one quick template, 10 renders and 5 phone photos.
   - Run the candidate VLMs and OCR engines, and measure accuracy, null behaviour, JSON validity, logprobs, VRAM and latency.
   - Write a go/no-go memo before building the data factory.
-  - Day 2 is a walking skeleton: a thin end-to-end path from photos to a decision page, deepened afterwards.
+  - Day 2: a skeleton CLI (photos → VLM → rules → HTML). Day 4: the first end-to-end run with OCR grounding, deepened afterwards.
 - **Rejected.** Building all templates first and running the bake-off on day 5.
 
 ## ADR-007 · Web stack: FastAPI + Jinja2 + HTMX (RTL)
@@ -100,7 +105,7 @@ The format follows lightweight Architecture Decision Records. New decisions are 
 ## ADR-010 · Two sealed test slices, labels by construction, a second author for attacks
 - **Context.** The MVP asks for "first results on your test set", and the progress review asks for results on a held-out set "you did not tune on". A single locked test cannot serve both. A hash alone proves the files did not change, not that nobody looked.
 - **Decision.**
-  - **Test-A** (30 packets) is opened at the MVP. **Test-B** (80 packets, with held-out layouts) is opened once, at the progress review.
+  - **Test-A** (30 packets) is opened at the MVP. **Test-B** (100 packets, with one held-out layout per document type) is opened once, at the progress review.
   - Both are sealed on 29 Oct (digital) and 1 Nov (photos) via committed SHA-256 manifests and an encrypted archive, whose key is offered to the organisers.
   - Unreadable, ambiguous and legible labels are computed from known occlusion masks. Phone photos follow a shot list, with corner clicks and a rubric.
   - A second person writes the adversarial cases.

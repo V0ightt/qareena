@@ -245,19 +245,19 @@ For required fields, null is scored separately (§9).
 6. Field type and document type (one-hot), plus the VLM's handwritten flag.
 7. The VLM's verbalised confidence, logged and used as a feature only. It is known to be overconfident.
 
-**Calibrator:** L2-regularised logistic regression with per-field-type intercepts, fitted on the **calibration** split only.
+**Scorer:** L2-regularised logistic regression with per-field-type intercepts, fitted on the **development** split. The calibration split is used **only** to certify τ, so the bound is not computed on data the scorer was fitted on.
 - Isotonic regression is used only for groups with more than about 1,000 rows, following scikit-learn guidance.
 - Evidence that fusing signals pays off: verbalised VLM confidence reached AUROC 0.54–0.74, while combined perception, layout and validation signals reached 0.90–0.99 (arXiv 2609.20110, Sep 2026 preprint).
 
-**Decision-critical fields (ADR-004).** About 10 fields per packet decide the KYC outcome:
+**Decision-critical fields (ADR-004).** About 11 fields per packet decide the KYC outcome:
 - given name, father, grandfather, laqab
 - national ID number, date of birth, ID expiry
-- trade name, license expiry, tax ID
+- trade name, chamber membership number, license expiry, tax ID
 
 The two targets must be consistent with each other. If each of 20 accepted fields were wrong 2% of the time, 33% of pre-checked packets would contain an error. At 1% with 10 fields it would still be about 10%. So a critical field is auto-accepted **only when two independent sources agree**:
 - **Front ↔ MRZ.** Covers ID number, date of birth and expiry, and the MRZ carries ICAO check digits.
 - **ID ↔ license ↔ tax card.** Covers names and trade name.
-- **VLM ↔ OCR, plus a zoomed re-read.** For fields that appear only once, such as license number and tax ID.
+- **VLM ↔ OCR, plus a zoomed re-read.** For fields that appear only once, such as membership number and tax ID.
 
 The MRZ name line is Latin script, and Iraqi transliteration is not standardised. It is shown as a hint, never used as a decisive cross-check.
 
@@ -297,7 +297,13 @@ What our data can certify (one-sided 95% bounds, computed):
 | 2/600 | 1.05% |
 | 5/1200 | 0.87% |
 
-So we can certify about 1%, not 0.1%. In production, α is a business parameter ZainCash chooses from the risk–coverage curve.
+**Feasibility, stated plainly:**
+- The calibration split is sized at **150 packets** (~1,650 critical fields) because digital packets cost only GPU time.
+- At ~70% coverage that is ~1,150 accepted critical fields. α = 1% then tolerates up to **5** accepted errors (5/1,150 → 0.91%). With only ~600 accepted fields it would tolerate 1.
+- The grid starts at the strictest τ that still accepts ≥ 300 critical calibration fields. That τ is set from scores alone, before any label is read.
+- The bound is pooled over digital and photo packets. Per-tier error is **reported, not certified**.
+- Fields are treated as independent for the bound, and a packet-level bootstrap is reported alongside.
+- We can certify about 1%, not 0.1%. In production, α is a business parameter ZainCash chooses from the risk–coverage curve.
 
 **Bands shown to reviewers:**
 
@@ -421,11 +427,11 @@ Normalisation risks we accept and test:
 | FINGER | إصبعك مغطّي جزء من البطاقة. شيله وصوّر مرة لخ. |
 | OK | عاشت إيدك! الصورة واضحة. |
 
-Quality-gate starting points. These are **calibrated on our labelled dev photos**, not taken as given:
+Quality-gate starting points. They are **fitted on digital development renders and the day-1 and development phone photos, then checked on calibration photos**, not taken as given:
 - Document area should be 60–80% of the frame.
 - Tilt should be ≤ 10°.
 - Glare is flagged when more than 1% of the document area is saturated (Regula's `maxGlaringPart` is 0.01).
-- Laplacian-variance blur thresholds depend on the domain, so they are fitted on 100–500 labelled crops.
+- Laplacian-variance blur thresholds depend on the domain. They are fitted on digital development renders (known blur σ) and the day-1 and development phone photos, then checked on calibration photos.
 
 **Stack:** FastAPI + Jinja2 (autoescape on, never `|safe`) + HTMX + Tailwind with `dir="rtl"` and logical properties. CSP is `default-src 'self'`.
 
@@ -437,10 +443,12 @@ Quality-gate starting points. These are **calibrated on our labelled dev photos*
 
 | Split | Packets (of which phone-photo) | Use | When opened |
 |---|---|---|---|
-| Development | 90 | Tuning prompts, rules and quality thresholds; error analysis | Always |
-| Calibration | 60 (8) | Fitting the scorer and choosing τ. Nothing else | Always, read-only after fitting |
+| Development | 80 (4) | Tuning prompts and rules, **fitting the scorer**, quality thresholds, error analysis | Always |
+| Calibration | 150 (8) | **Certifying τ only** (fixed-sequence Clopper–Pearson) | Read once per frozen scorer |
 | **Test-A** | 30 (4) | MVP "first results on your test set" | Once, on 6 Nov |
-| **Test-B** | 80 (12) | Held-out results for the progress review. Contains one layout per document type that appears nowhere else | Once, at the progress review |
+| **Test-B** | 100 (12) | Held-out results for the progress review. Holds one held-out layout per document type | Once, at the progress review |
+
+Total: 360 packets (≈ 1,440 digital document images), plus 28 printed packets (≈ 112 phone photos, plus ~20 WhatsApp forwards).
 
 **Leakage rules**, following DocXPand, MIDV and the "Beyond Accuracy" lesson:
 - Split field-value rows by fictional person *before* rendering.
@@ -477,13 +485,13 @@ Pass criterion: no crash, no PRE_CHECKED, and a sensible message.
 
 ### 9.2 Metrics
 
-Judge-facing targets were fixed before testing. Every rate is reported with n and a Wilson 95% CI, plus a cluster bootstrap by document.
+Judge-facing targets were fixed before testing. Every rate is reported with n and a Wilson 95% CI, plus a cluster bootstrap by packet.
 
 | Metric | Definition | Target |
 |---|---|---|
-| Unsafe pre-check | Packets marked PRE_CHECKED with ≥ 1 wrong critical field or a missed planted defect | 0 observed. Report the one-sided 95% bound for both denominators: all packets (Test-B: 0/80 → 3.7%) and pre-checked packets |
+| Unsafe pre-check | Packets marked PRE_CHECKED with ≥ 1 wrong critical field or a missed planted defect | 0 observed. Report the one-sided 95% bound for both denominators: all packets (Test-B: 0/100 → 2.95%) and pre-checked packets |
 | Planted-defect escapes | Packets with a planted defect (conflict, expired, unreadable, MRZ mismatch, injection) that were pre-checked ÷ defect packets | 0 of ~40 (bound ≤ 7.2%) |
-| Error among accepted critical fields | Wrong ÷ accepted critical fields | ≤ 1% (95% bound) |
+| Error among accepted critical fields | Wrong ÷ accepted critical fields | ≤ 1% (95% bound) on Test-B. On Test-A (≤ ~300 fields) we report errors/n |
 | Error among other accepted fields | Wrong ÷ accepted non-critical fields | ≤ 2% (95% bound) |
 | Evidence box correct | Accepted fields whose evidence box has IoU ≥ 0.5 with ground truth (digital tier) | ≥ 95% |
 | False fill | Non-null outputs ÷ fields labelled UNREADABLE | 0 |
@@ -506,9 +514,10 @@ Judge-facing targets were fixed before testing. Every rate is reported with n an
 - Field-level metrics are also bootstrapped by packet (fields cluster within a photo).
 
 **What n can support:**
-- 0 errors in 80 packets bounds the error at 3.7%; in 30 packets, 9.5%.
-- About 600 accepted critical fields with 0–2 errors certify 0.5–1.05%.
+- 0 errors in 100 packets bounds the error at 2.95%; in 30 packets, 9.5%.
+- At α = 1%: 300 accepted fields tolerate 0 errors, 600 tolerate 1, 900 tolerate 3, 1,150 tolerate 5.
 - Rates measured on ~20 planted cases (for example conflicts in Test-A) are **reported, not certified**.
+- **Bootstrap:** by packet, not by document.
 
 **Baselines and ablations** (what each part buys). All of these come out of one logged run, so they cost almost nothing extra:
 - A: VLM single pass, everything accepted (no confidence at all).
@@ -534,7 +543,7 @@ A hand-written OCR + regex baseline was dropped. It would take days of per-templ
 
 | Risk | Control |
 |---|---|
-| LLM01 prompt injection (including visual) | Document text is data. The VLM has **no tools**; output is schema-constrained; routing is code. An instruction-pattern detector flags suspicious text; a 20-document attack slice is measured |
+| LLM01 prompt injection (including visual) | Document text is data. The VLM has **no tools**; output is schema-constrained; routing is code. An instruction-pattern detector flags suspicious text; a 40-document attack slice (instructions + label spoofing) is measured |
 | LLM05 improper output handling | Extracted strings are untrusted user input: Jinja autoescape, CSP, length and charset validation, and CSV formula-injection guard on export |
 | LLM06 excessive agency | Read-only tools, budgets, no write or approve tools. A human owns every exception |
 | LLM02 sensitive information disclosure | No PII in prompts beyond the image itself, no PII in logs (field names and reason codes only), and the audit log is separate from the PII store |
@@ -584,7 +593,7 @@ The generator follows the DocXPand approach (MIT code: templates + field generat
    - Parameter ranges are borrowed from IDSPACE: blur σ 0.5–2.0, noise σ 0–25, brightness and contrast ×0.8–1.2, rotation ±5°.
    - All seeded.
 6. **Phone photos.**
-   - Print **24 packets** (96 documents). ID cards go on glossy photo paper, laminated with rounded corners as in MIDV-2020. The license and tax card stay on plain card stock, as in reality.
+   - Print **28 packets** (112 documents): 4 development, 8 calibration, 4 Test-A, 12 Test-B. ID cards go on glossy photo paper, laminated with rounded corners as in MIDV-2020. The license and tax card stay on plain card stock, as in reality.
    - Shoot with 2 phones following a written shot list, about 1 photo per document in its assigned condition: normal, low light, lamp glare, 30–45° angle, finger over a planned field, cut corner, cluttered background.
    - Forward about 20 of them through WhatsApp.
 7. **Manifests and seeds** are committed. Raw images stay out of git, except a handful of samples.
@@ -622,42 +631,42 @@ The generator follows the DocXPand approach (MIT code: templates + field generat
 
 Two principles: **test the riskiest assumption first** (ADR-006), and **integrate early**. The first end-to-end run is on day 4.
 
-**Week 1 (Thu 23 – Wed 29 Oct): de-risk, then a walking skeleton**
-- **Thu 23:**
+**Week 1 (Fri 23 – Thu 29 Oct): de-risk, then a walking skeleton**
+- **Fri 23:**
   - Free disk space (remove unused Ollama models); Ollama → 0.40.8; Python 3.12 env.
   - **Spike:** 1 quick ID template → 10 renders + 5 phone photos → `qwen3.5:4b` and `qwen3-vl:4b`, plus RapidOCR (PP-OCRv5 Arabic) and Tesseract. Run the 6 smoke tests in §2.
   - Measure CER, null behaviour, JSON validity, logprobs with image input, VRAM and latency.
   - Email the organisers asking for a session with a ZainCash onboarding reviewer.
-- **Fri 24:**
+- **Sat 24:**
   - **Stack decision memo:** one VLM and one OCR engine.
   - Repo tooling (uv, ruff, pytest, CI + gitleaks).
   - Skeleton CLI: photos → VLM → JSON → 3 rules → HTML.
-- **Sat 25:** profile generator; templates (ID front and back, Chamber ID, tax card), layout A.
-- **Sun 26:**
+- **Sun 25:** profile generator; templates (ID front and back, Chamber ID, tax card), layout A.
+- **Mon 26:**
   - **First end-to-end run on 10 packets**, with OCR grounding.
   - Layout B; held-out layouts.
-- **Mon 27:**
+- **Tue 27:**
   - **≥ 3 user conversations:** an onboarding reviewer, a KYC officer, 2–3 shop owners or field reps.
   - Then freeze schema and rulebook v1. Changes are configuration, so they stay cheap.
-- **Tue 28:**
+- **Wed 28:**
   - Planted cases; degradations with coverage masks; full data generation.
   - Adversarial set from a second person.
   - Quality gate v0.
-- **Wed 29:** **seal Test-A and Test-B (digital)**; dev-set run of the chosen stack; buffer.
+- **Thu 29:** **seal Test-A and Test-B (digital)**; dev-set run of the chosen stack; buffer.
 
-**Week 2 (Thu 30 Oct – Wed 5 Nov): make it right, and measure it**
-- **Thu 30:** rules + MRZ + name matcher (unit and property tests); orientation, PDF and unsupported-input paths.
-- **Fri 31:** evidence loop + router + `AWAITING_RETAKE` state; print the physical tier (24 packets) at a print shop.
-- **Sat 1:** photograph by shot list; corner clicks; rubric labels; **seal the photo parts of Test-A and Test-B**.
-- **Sun 2:** calibrator and fixed-sequence τ on the calibration split (digital and photos).
-- **Mon 3:** reviewer workbench v0 (RTL, SSE progress, approve gating) + capture page v0.
-- **Tue 4:** evaluation harness → development report (risk–coverage, reliability, slices); odd-input suite.
-- **Wed 5:** hardening; capture-page test with 2–3 merchants or field reps; buffer.
+**Week 2 (Fri 30 Oct – Thu 5 Nov): make it right, and measure it**
+- **Fri 30:** rules + MRZ + name matcher (unit and property tests); orientation, PDF and unsupported-input paths.
+- **Sat 31:** evidence loop + router + `AWAITING_RETAKE` state; print the physical tier (28 packets) at a print shop.
+- **Sun 1:** photograph by shot list; corner clicks; rubric labels; **seal the photo parts of Test-A and Test-B**.
+- **Mon 2:** fit the scorer on development; certify τ by fixed sequence on the calibration split (digital and photos).
+- **Tue 3:** reviewer workbench v0 (RTL, SSE progress, approve gating) + capture page v0.
+- **Wed 4:** evaluation harness → development report (risk–coverage, reliability, slices); odd-input suite.
+- **Thu 5:** hardening; capture-page test with 2–3 merchants or field reps **using our printed specimens, never their real documents**; buffer.
 
-**MVP (Thu 6 – Sat 8 Nov)**
-- **Thu 6:** open **Test-A** once → first test results; document 3+ failure modes with demo cases.
-- **Fri 7:** one-page update; demo rehearsal (the 60-second story plus a judge-input drill).
-- **Sat 8:** buffer → **submit**.
+**MVP (Fri 6 – Sun 8 Nov)**
+- **Fri 6:** open **Test-A** once → first test results; document 3+ failure modes with demo cases.
+- **Sat 7:** one-page update; demo rehearsal (the 60-second story plus a judge-input drill).
+- **Sun 8:** buffer → **submit**.
 
 **After the MVP (→ progress review, date TBC):**
 - Timed reviewer study.
