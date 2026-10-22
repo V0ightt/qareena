@@ -177,6 +177,9 @@ def canonicalize_fillers(lines: list[str] | tuple[str, ...]) -> tuple[tuple[str,
             l1 = head + content.ljust(15, "<")
             notes.append(f"line 1 filler re-padded ({len(rows[0])} -> 30)")
 
+    if len(l2) > LINE_LEN and set(l2[LINE_LEN:]) <= {"<"} and l2[LINE_LEN - 1].isdigit():
+        l2 = l2[:LINE_LEN]  # stray fillers after the composite check digit
+        notes.append(f"line 2 trailing filler removed ({len(rows[1])} -> 30)")
     if len(l2) != LINE_LEN and len(l2) >= 19:
         head, middle, last = l2[:18], l2[18:-1], l2[-1]
         if set(middle) <= {"<"} and last.isdigit():
@@ -193,6 +196,76 @@ def canonicalize_fillers(lines: list[str] | tuple[str, ...]) -> tuple[tuple[str,
             notes.append(f"line 3 filler re-padded ({len(l3)} -> 30)")
         l3 = new3
     return (l1, l2, l3), tuple(notes)
+
+
+# Character classes per position for the Iraqi national card's TD1 (public structure):
+# A = letter or filler, N = digit, X = anything. Line 3 (names) is letters only.
+IRQ_TD1_PROFILE = (
+    "AA"
+    + "AAA"
+    + "AA"
+    + "N" * 7
+    + "N"
+    + "N" * 12
+    + "XXX",  # code, issuer, access no. (2 letters + 7 digits), CD, NIN
+    "N" * 6
+    + "N"
+    + "A"
+    + "N" * 6
+    + "N"
+    + "AAA"
+    + "X" * 11
+    + "N",  # DOB, CD, sex, expiry, CD, nationality, opt, CD
+    "A" * 30,
+)
+_TO_LETTER = str.maketrans({"0": "O", "1": "I", "2": "Z", "5": "S", "6": "G", "8": "B"})
+_TO_DIGIT = str.maketrans(
+    {"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1", "Z": "2", "S": "5", "G": "6", "B": "8"}
+)
+
+
+def repair_types(
+    lines: tuple[str, str, str], profile: tuple[str, str, str] = IRQ_TD1_PROFILE
+) -> tuple[tuple[str, str, str], tuple[str, ...]]:
+    """Fix letter/digit confusions (O/0, I/1, S/5, B/8...) in positions whose class is fixed.
+
+    Only call this on lines whose strict parse failed, and only trust the result if every
+    check digit then passes: the check digits, not this function, decide.
+    """
+    out, notes = [], []
+    for n, (line, classes) in enumerate(zip(lines, profile, strict=True), 1):
+        chars = list(line)
+        for i, (ch, cls) in enumerate(zip(line, classes, strict=False)):
+            if cls == "A" and ch.isdigit():
+                chars[i] = ch.translate(_TO_LETTER)
+            elif cls == "N" and ch.isalpha():
+                chars[i] = ch.translate(_TO_DIGIT)
+        fixed = "".join(chars)
+        if fixed != line:
+            notes.append(
+                f"line {n}: {sum(a != b for a, b in zip(line, fixed, strict=False))} character class fix(es)"
+            )
+        out.append(fixed)
+    return (out[0], out[1], out[2]), tuple(notes)
+
+
+def read_td1(
+    raw_lines: list[str] | tuple[str, ...], *, today: dt.date | None = None
+) -> tuple[TD1, tuple[str, ...]]:
+    """Canonicalise fillers, parse strictly, and only if that fails try class repair.
+
+    Returns the parse that was used and the notes describing every change made to the text.
+    """
+    lines, notes = canonicalize_fillers(raw_lines)
+    strict = parse_td1(lines, today=today)
+    if strict.valid:
+        return strict, notes
+    repaired, fixes = repair_types(lines)
+    if fixes:
+        second = parse_td1(repaired, today=today)
+        if second.valid:
+            return second, (*notes, *fixes, "accepted only because every check digit passes")
+    return strict, notes
 
 
 # --- internals ------------------------------------------------------------------------

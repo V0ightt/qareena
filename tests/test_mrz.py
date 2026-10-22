@@ -162,3 +162,42 @@ def test_generator_refuses_bad_input():
             primary_name="X",
             secondary_names=[],
         )
+
+
+def test_class_repair_fixes_o_zero_confusions_only_when_check_digits_pass():
+    from qareena.checks.mrz import read_td1
+
+    lines = make_td1(
+        document_number="OE9159457",
+        optional_1="995258598991",
+        birth_date=dt.date(1990, 3, 7),
+        sex="M",
+        expiry_date=dt.date(2034, 5, 1),
+        primary_name="ALZUBAIDI",
+        secondary_names=["RAAD"],
+    )
+    misread = (lines[0].replace("UTO", "UT0").replace("OE9", "0E9"), lines[1] + "<<", lines[2] + "<")
+    m, notes = read_td1(misread, today=TODAY)
+    assert m.valid
+    assert m.document_number == "OE9159457"
+    assert m.issuer == "UTO"
+    assert any("check digit" in n for n in notes)
+
+
+def test_class_repair_cannot_rescue_a_wrong_digit():
+    from qareena.checks.mrz import read_td1
+
+    rows = list(
+        make_td1(
+            document_number="AB1234567",
+            optional_1="991234567890",
+            birth_date=dt.date(1990, 3, 7),
+            sex="M",
+            expiry_date=dt.date(2034, 5, 1),
+            primary_name="X",
+            secondary_names=["Y"],
+        )
+    )
+    rows[1] = rows[1][:2] + ("7" if rows[1][2] != "7" else "6") + rows[1][3:]  # a real digit misread
+    m, _ = read_td1(rows, today=TODAY)
+    assert not m.valid

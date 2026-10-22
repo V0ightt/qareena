@@ -49,7 +49,7 @@ def perspective(
     canvas = np.full((h + 2 * mh, w + 2 * mw, 3), background, np.uint8)
     src = np.float32([[0, 0], [w, 0], [w, h], [0, h]])
     jitter = rng.uniform(-max_shift, max_shift, (4, 2)) * [w, h]
-    dst = ([*src, mw, mh, *jitter]).astype(np.float32)
+    dst = (src + np.float32([mw, mh]) + jitter).astype(np.float32)  # array arithmetic, not list concat
     m = cv2.getPerspectiveTransform(src, dst)
     return cv2.warpPerspective(
         img, m, (canvas.shape[1], canvas.shape[0]), dst=canvas, borderMode=cv2.BORDER_TRANSPARENT
@@ -79,6 +79,6 @@ def glare_over(
 
 def coverage(mask: np.ndarray, box: tuple[float, float, float, float], threshold: float = 0.6) -> float:
     """Fraction of the box whose mask value exceeds ``threshold`` (i.e. text is washed out)."""
-    x0, y0, x1, y1 = (round(v) for v in box)
+    x0, y0, x1, y1 = (int(round(float(v))) for v in box)  # noqa: RUF046 - numpy floats must become int
     region = mask[max(0, y0) : max(0, y1), max(0, x0) : max(0, x1)]
     return float((region > threshold).mean()) if region.size else 0.0

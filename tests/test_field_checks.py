@@ -38,3 +38,22 @@ def test_format_checks():
     assert format_error("male", SEX) == "VALUE_NOT_ALLOWED"
     assert format_error("علي", NAME) is None
     assert format_error("<script>", NAME) == "NAME_NOT_ARABIC_LETTERS"
+
+
+@pytest.mark.parametrize("value", ["د.ه.س.ل.ت.ن", "ل.ه.د.ا.ي.ك.ب.و.و.ن", "د.م.ه.ل.ن"])
+def test_spelled_out_glyphs_are_garbled(value):
+    from qareena.checks.fields import garbled
+
+    assert garbled(value)
+
+
+@pytest.mark.parametrize("value", ["علي", "مديرية البطاقة النموذجية", "A+", "O+", "عبد الله"])
+def test_normal_values_are_not_garbled(value):
+    from qareena.checks.fields import garbled
+
+    assert not garbled(value)
+
+
+@pytest.mark.parametrize("value", ["دايك", "باوك", "ناو"])
+def test_kurdish_labels_respelled_in_arabic_are_echoes(value):
+    assert label_echo(value, LABELS) is not None

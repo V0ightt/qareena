@@ -48,5 +48,10 @@ def user_prompt(doc: DocumentSpec) -> str:
             FieldKind.DIGITS: " (digits only)",
         }.get(spec.kind, "")
         lines.append(f"- {name}: {spec.label_ar}{hint}")
+    printed = [lab for spec in doc.fields.values() for lab in (spec.label_ar, *spec.aliases)]
+    lines.append(
+        "These words are printed LABELS on the document (Arabic, and Kurdish in Arabic script). "
+        "They are never values; do not return any of them: " + " ، ".join(printed)
+    )
     lines.append("Return the JSON object now.")
     return "\n".join(lines)

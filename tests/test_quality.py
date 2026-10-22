@@ -79,3 +79,17 @@ def test_no_outline_falls_back_to_whole_image():
     r = assess(plain)
     assert not r.ok
     assert r.notes
+
+
+def test_perspective_degradation_keeps_the_document_findable():
+    tilted = degrade.perspective(on_table(card(), scale=1), np.random.default_rng(3), max_shift=0.05)
+    assert tilted.shape[0] > 1200
+    assert tilted.dtype == np.uint8
+    r = assess(tilted)
+    assert r.quad is not None or r.notes
+
+
+def test_coverage_accepts_numpy_float_boxes():
+    mask = np.zeros((100, 100), np.float32)
+    mask[10:50, 10:50] = 1.0
+    assert degrade.coverage(mask, tuple(np.float64(v) for v in (10, 10, 50, 50)), threshold=0.9) == 1.0

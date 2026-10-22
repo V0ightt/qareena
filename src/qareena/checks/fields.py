@@ -30,11 +30,11 @@ def label_echo(value: str, labels: frozenset[str] | set[str]) -> str | None:
     letters (ە -> ه, ڵ -> ل). A value echoes a label if it equals it, starts with it, or (for
     labels of 5+ letters) is at least 80% similar to it.
     """
-    v = arabic.sound(value).replace(" ", "")
+    v = _letters(arabic.sound(value))
     if not v:
         return None
     for label in (*labels, *BOILERPLATE):
-        lab = arabic.sound(label).replace(" ", "")
+        lab = _letters(arabic.sound(label))
         if not lab:
             continue
         if v == lab:
@@ -44,6 +44,22 @@ def label_echo(value: str, labels: frozenset[str] | set[str]) -> str | None:
         ):
             return label
     return None
+
+
+def _letters(text: str) -> str:
+    """Letters and digits only: dots, spaces and punctuation are ignored when comparing."""
+    return "".join(ch for ch in text if ch.isalnum())
+
+
+_SEP = "[." + chr(0x0640) + " -]"  # dot, tatweel, space or hyphen between letters
+_GARBLED = re.compile(r"^(?:\w" + _SEP + r"){2,}\w?" + _SEP + "?$")
+
+
+def garbled(value: str) -> bool:
+    """Single letters separated by dots or spaces ("د.ه.س.ل.ت.ن"): a model spelling out glyphs it
+    could not read. Treated as unreadable, never as a value."""
+    text = arabic.strict(value)
+    return bool(_GARBLED.match(text)) and sum(ch.isalpha() for ch in text) >= 3
 
 
 def format_error(value: str, spec: FieldSpec) -> str | None:

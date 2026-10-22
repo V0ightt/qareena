@@ -10,8 +10,8 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Mapping
 
-from qareena.checks.fields import format_error, label_echo
-from qareena.checks.mrz import canonicalize_fillers, parse_td1
+from qareena.checks.fields import format_error, garbled, label_echo
+from qareena.checks.mrz import read_td1
 from qareena.config import Catalog, FieldKind, Policy
 from qareena.eval.compare import canonical
 from qareena.pipeline.records import CrossCheck, DocumentRead, FieldRecord, Source
@@ -36,9 +36,11 @@ def apply_field_rules(doc: DocumentRead, catalog: Catalog) -> None:
     spec_doc = catalog.documents[doc.doc_type]
     for name, rec in doc.fields.items():
         spec = spec_doc.fields[name]
-        if rec.raw is not None and label_echo(rec.raw, labels) is not None:
-            rec.value = None  # a printed label is not a value: treat the field as unread
-            rec.add_reason("LABEL_ECHO", blocking=spec.required)
+        if rec.raw is not None and (label_echo(rec.raw, labels) is not None or garbled(rec.raw)):
+            rec.value = None  # a printed label or spelled-out glyphs are not a value: treat as unread
+            rec.add_reason(
+                "LABEL_ECHO" if label_echo(rec.raw, labels) else "GARBLED_TEXT", blocking=spec.required
+            )
             rec.evidence.ocr_matches = 0
         if rec.value is None:
             if spec.required:
@@ -81,8 +83,7 @@ def _mrz_rules(front: DocumentRead | None, back: DocumentRead, today: dt.date) -
     raw = [back.fields.get(f"mrz_line_{k}") for k in (1, 2, 3)]
     if any(r is None or r.raw is None for r in raw):
         return
-    lines, notes = canonicalize_fillers([r.raw for r in raw])  # type: ignore[union-attr]
-    mrz = parse_td1(lines, today=today)
+    mrz, notes = read_td1([r.raw for r in raw], today=today)  # type: ignore[union-attr]
     back.mrz = {
         "valid": mrz.valid,
         "checks": mrz.checks,

@@ -22,7 +22,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from qareena.checks.mrz import parse_td1
+from qareena.checks.fields import garbled, label_echo
+from qareena.checks.mrz import read_td1
 from qareena.config import Settings, load_runtime
 from qareena.eval.compare import score_field
 from qareena.readers.ocr import ArabicOcr
@@ -103,7 +104,7 @@ def build_items(n: int, out: Path, runtime, seed: int) -> list[dict]:
                     h, w = img.shape[:2]
                     box = (b[0] * w / 1000, b[1] * h / 1000, b[2] * w / 1000, b[3] * h / 1000)
                     deg, mask = degrade.glare_over(img, box)
-                    if degrade.coverage(mask, box) >= 0.5:
+                    if degrade.coverage(mask, box, threshold=0.9) >= 0.5:  # truly washed out
                         gt_d[target] = None
                 path = out / f"{i:02d}_{doc_type}_{cond}.png"
                 cv2.imwrite(str(path), deg)
@@ -120,9 +121,13 @@ def run_vlm(client: OllamaClient, model: str, item: dict, runtime) -> dict:
         model=model, system=SYSTEM, user=user_prompt(doc), schema=field_schema(doc), images=[png_bytes(img)]
     )
     scores = {}
+    labels = runtime.catalog.printed_labels()
     for f, spec in doc.fields.items():
         pred = res.data.get(f) if res.data else None
         s = score_field(item["gt"].get(f), pred, spec)
+        # what the system keeps after its deterministic checks (label echo / garbled -> null)
+        kept = None if pred is not None and (label_echo(str(pred), labels) or garbled(str(pred))) else pred
+        s2 = score_field(item["gt"].get(f), kept, spec)
         scores[f] = {
             "exp": s.expected,
             "pred": s.predicted,
@@ -130,11 +135,14 @@ def run_vlm(client: OllamaClient, model: str, item: dict, runtime) -> dict:
             "cer": s.cer,
             "false_fill": s.false_fill,
             "false_null": s.false_null,
+            "checked_correct": s2.correct,
+            "checked_false_fill": s2.false_fill,
+            "checked_false_null": s2.false_null,
         }
     mrz_valid = None
     if item["doc_type"] == "iq_national_card_back" and res.data:
         lines = [res.data.get(f"mrz_line_{k}") or "" for k in (1, 2, 3)]
-        mrz_valid = parse_td1(lines, today=TODAY).valid
+        mrz_valid = read_td1(lines, today=TODAY)[0].valid
     tokens = [t.token for t in res.logprobs]
     return {
         "model": model,
@@ -187,8 +195,8 @@ def summarize(vlm_rows: list[dict], ocr_rows: dict[str, list[dict]], vram: dict)
     out += [
         "## VLM field extraction",
         "",
-        "| model | condition | images | JSON ok | field exact | mean CER | false fills | false nulls | MRZ valid | p50 s | p95 s | prompt tok |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| model | condition | images | JSON ok | field exact | mean CER | false fills | false nulls | after checks: exact / false fills / nulls | MRZ valid | p50 s | p95 s | prompt tok |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for model in sorted({r["model"] for r in vlm_rows}):
         rows = [r for r in vlm_rows if r["model"] == model]
@@ -208,6 +216,9 @@ def summarize(vlm_rows: list[dict], ocr_rows: dict[str, list[dict]], vram: dict)
                 f"{statistics.fmean([s['cer'] for s in legible]):.3f} | "
                 f"{sum(s['false_fill'] for s in unreadable)}/{len(unreadable)} | "
                 f"{sum(s['false_null'] for s in legible)} | "
+                f"{sum(s['checked_correct'] for s in legible)} / "
+                f"{sum(s['checked_false_fill'] for s in unreadable)} / "
+                f"{sum(s['checked_false_null'] for s in legible)} | "
                 f"{(str(sum(mrz)) + '/' + str(len(mrz))) if mrz else '-'} | "
                 f"{statistics.median(secs):.1f} | {p95:.1f} | "
                 f"{statistics.fmean([r['metrics']['prompt_tokens'] for r in rs]):.0f} |"
