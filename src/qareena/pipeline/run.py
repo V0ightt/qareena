@@ -141,6 +141,11 @@ class Pipeline:
     def close(self) -> None:
         self._pool.shutdown(wait=False)
 
+    def read_images(self) -> dict[str, np.ndarray]:
+        """What the readers saw in the last ``run`` (flattened documents). Evidence boxes are in
+        these coordinates, so the reviewer is shown these images."""
+        return dict(self._regions)
+
     # --- one document -------------------------------------------------------------------
 
     def read_document(

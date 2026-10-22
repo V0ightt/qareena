@@ -17,6 +17,11 @@ dependencies = [
     "opencv-python-headless>=4.10",
     "rapidocr[rtl]>=3.10",
     "onnxruntime>=1.20",
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    "python-multipart>=0.0.18",
+    "cryptography>=44",
+    "jinja2>=3.1",
 ]
 
 [project.scripts]
@@ -29,9 +34,13 @@ dev = [
     "ruff>=0.7",
 ]
 synth = [
-    "jinja2>=3.1",
     "playwright>=1.48",
 ]
+
+[tool.uv]
+# synth (templates' renderer driver) is needed by the dataset tools and their tests: keep it
+# installed, or every plain `uv run` would uninstall it again
+default-groups = ["dev", "synth"]
 
 [build-system]
 requires = ["hatchling>=1.25"]

@@ -83,6 +83,10 @@ The format follows lightweight Architecture Decision Records. New decisions are 
   - Streamlit: no native RTL; its camera input can't select the rear camera.
   - Gradio: rigid layout; its annotation component is pinned to old versions.
   - React SPA: adds a build chain a solo developer doesn't need.
+- **Revised while building (22 Oct).**
+  - HTMX and Tailwind were dropped for one hand-written stylesheet and about 100 lines of vanilla JavaScript: polling, keyboard shortcuts and box highlighting. The pages need no more, and there is nothing to vendor or build. Every page also works without JavaScript.
+  - Progress is polled every 2 s instead of streamed over SSE. A case takes 30–60 s, so polling is simpler and just as responsive.
+  - `Referrer-Policy` is `same-origin`, not `no-referrer`: with `no-referrer` browsers send `Origin: null` on form posts, which the cross-site guard must refuse. A real-browser test caught this.
 
 ## ADR-008 · Synthetic templates that are unmistakably fake
 - **Context.** Realistic synthetic IDs could be misused, and forgery is a crime under Iraqi Penal Code 111/1969.
@@ -171,7 +175,7 @@ The format follows lightweight Architecture Decision Records. New decisions are 
 ## ADR-017 · The input size is certified policy, chosen per document type
 - **Context.** The day-1 spike fixed 1600 px for ID cards. The business documents read far worse at that size: 151/252 exact vs 212/252 at 1024 px. Every right-to-left reversal and column swap happened at 1600 px, and so did a repetition loop.
 - **Decision.**
-  - `policy.reader` sets the long side sent to the VLM, per document type: chamber 1280 px, tax card 1024 px, cards 1600 px pending their study.
+  - `policy.reader` sets the long side sent to the VLM, per document type: chamber 1280 px, tax card 1024 px, ID cards 1600 px (232/336 exact; 1280 px equal, 1024 px 208).
   - A looping or unparseable answer gets one retry at the other size.
   - Because size changes the readings, it lives in the content-hashed policy: changing it voids the certificate (ADR-013).
 - **Rejected.** Choosing size per layout (the layout is unknown at read time), and a prompt sentence about RTL order (no measurable effect).

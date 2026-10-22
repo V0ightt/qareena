@@ -36,7 +36,7 @@ reader:
   # tools/spike/business_ab.py, clean renders of layouts A-C (exact fields of 252 for the
   # business documents): 1600 px 151, 1280 px 202, 1024 px 212. Every right-to-left reversal,
   # column swap and repetition loop happened at 1600 px.
-  long_side_px: 1600           # ID cards (size study for cards: see the decision memo)
+  long_side_px: 1600           # ID cards: 1600 px 232/336, 1280 px 232, 1024 px 208 (equal at 1600/1280)
   long_side_px_by_document:
     chamber_of_commerce_id: 1280   # 122/144 (1024 px: 116)
     tax_card: 1024                 # 96/108 (1280 px: 80, 1600 px: 42)

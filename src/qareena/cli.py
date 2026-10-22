@@ -194,6 +194,28 @@ def _eval(args: argparse.Namespace) -> int:
     return 0
 
 
+def _serve(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from qareena.pipeline.run import OllamaVlmReader, Pipeline
+    from qareena.readers.ocr import ArabicOcr
+    from qareena.readers.ollama import OllamaClient
+    from qareena.web.app import create_app
+
+    runtime = load_runtime(Settings())
+
+    def make_pipeline() -> Pipeline:
+        client = OllamaClient(runtime.settings.ollama_url, timeout_s=300)
+        return Pipeline(runtime, OllamaVlmReader(runtime, client), ArabicOcr())
+
+    password = runtime.settings.reviewer_password
+    app = create_app(
+        runtime, make_pipeline, reviewer_password=password.get_secret_value() if password else None
+    )
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    return 0
+
+
 def _status(args: argparse.Namespace) -> int:
     from qareena.pipeline.scoring import certificate_path, load_certificate
     from qareena.readers.ollama import OllamaClient, OllamaError
@@ -256,6 +278,10 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--weights", type=Path, default=Path("var/scorer/weights.json"))
     ev.add_argument("--tau", type=float, help="report: what-if threshold (development only)")
     ev.set_defaults(func=_eval)
+    sv = sub.add_parser("serve", help="the web app: capture page, reviewer workbench, system page")
+    sv.add_argument("--host", default="127.0.0.1", help="listen address (default: this machine only)")
+    sv.add_argument("--port", type=int, default=8000)
+    sv.set_defaults(func=_serve)
     st = sub.add_parser("status", help="configuration fingerprint, certification and model server health")
     st.set_defaults(func=_status)
     args = ap.parse_args(argv)

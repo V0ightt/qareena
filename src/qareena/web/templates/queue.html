@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}قرينة · قائمة المراجعة{% endblock %}
+{% block body_class %}reviewer{% endblock %}
+{% block home %}/review{% endblock %}
+{% block nav %}<nav><a href="/review" aria-current="page">الملفات</a><a href="/system">النظام</a></nav>{% endblock %}
+{% block main %}
+<h1>الملفات</h1>
+{% if not cases %}<p class="muted">ما اكو ملفات بعد.</p>{% endif %}
+<table class="queue">
+  <thead><tr><th>الملف</th><th>النتيجة</th><th>أهم الأسباب</th><th>الحالة</th><th>القرار</th><th>الوقت</th></tr></thead>
+  <tbody>
+  {% for c in cases %}
+    <tr class="outcome-{{ (c.outcome or c.status)|lower }}">
+      <td><a href="/review/{{ c.id }}"><code>{{ c.id }}</code></a></td>
+      <td>{% if c.outcome %}<span class="badge {{ c.outcome|lower }}">{{ text.OUTCOME[c.outcome] }}</span>{% else %}—{% endif %}</td>
+      <td class="reasons">{% if c.result %}{% for r in c.result.reasons[:3] %}<span>{{ text.reason(r) }}</span>{% endfor %}{% endif %}</td>
+      <td>{{ text.STATUS[c.status] }}</td>
+      <td>{% if c.decision and c.decision.get("final") %}{{ {"approve": "موافَق", "reject": "مرفوض", "escalate": "مُصعَّد"}[c.decision.final.verdict] }}{% else %}—{% endif %}</td>
+      <td class="muted" data-ts="{{ c.created }}"></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+{% block foot %}{{ text.NOT_CHECKED }}{% endblock %}

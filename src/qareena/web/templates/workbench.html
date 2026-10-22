@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}قرينة · ملف {{ case.id }}{% endblock %}
+{% block body_class %}reviewer workbench{% endblock %}
+{% block home %}/review{% endblock %}
+{% block nav %}<nav><a href="/review">الملفات</a><a href="/system">النظام</a></nav>{% endblock %}
+{% block main %}
+{% set final = case.decision.final if case.decision and case.decision.get("final") else None %}
+<div class="wb-head">
+  <h1>ملف <code>{{ case.id }}</code></h1>
+  {% if case.outcome %}<span class="badge {{ case.outcome|lower }}">{{ text.OUTCOME[case.outcome] }}</span>{% endif %}
+  {% if final %}<span class="badge decided">القرار: {{ {"approve": "موافَق", "reject": "مرفوض", "escalate": "مُصعَّد"}[final.verdict] }}</span>{% endif %}
+</div>
+{% if case.status != "DONE" %}
+  <p class="lead" {% if case.status in ("QUEUED", "PROCESSING") %}data-poll="/cases/{{ case.id }}/status"{% endif %}>{{ text.STATUS[case.status] }}…</p>
+{% else %}
+{% if result.reasons %}<ul class="packet-reasons">{% for r in result.reasons %}<li>{{ text.reason(r) }}</li>{% endfor %}</ul>{% endif %}
+
+{% for d in documents %}
+<section class="doc" id="doc-{{ d.type }}">
+  <h2>{{ text.DOCUMENT.get(d.type, d.type) }}</h2>
+  {% if d.doc.reasons %}<p class="doc-reasons">{% for r in d.doc.reasons %}<span>{{ text.reason(r) }}</span>{% endfor %}</p>{% endif %}
+  <div class="doc-body">
+    <ol class="fields">
+    {% for f in d.fields %}
+      {% set rec = f.rec %}
+      {% set label = catalog.documents[d.type].fields[f.name].label_ar %}
+      <li class="field band-{{ rec.band or 'none' }}{% if f.flagged and not f.decision %} open{% endif %}" id="f-{{ d.type }}-{{ f.name }}" tabindex="0" data-box="{{ d.type }}:{{ f.name }}">
+        <div class="field-head">
+          <span class="field-label">{{ label }}</span>
+          {% if rec.band %}<span class="band">{{ text.BAND[rec.band] }}</span>{% endif %}
+          {% if rec.p_correct is not none %}<span class="score" title="الثقة المعايرة">{{ "%.0f"|format(rec.p_correct * 100) }}٪</span>{% endif %}
+        </div>
+        {% if f.flagged and rec.evidence.box %}
+          {% set b = rec.evidence.box %}{% set pad = 0.6 * (b[3] - b[1]) %}
+          <svg class="crop" viewBox="{{ b[0] - pad }} {{ b[1] - pad }} {{ b[2] - b[0] + 2 * pad }} {{ b[3] - b[1] + 2 * pad }}" role="img" aria-label="مقطع الحقل من الوثيقة">
+            <image href="/review/{{ case.id }}/image/{{ d.type }}" x="0" y="0" width="{{ d.size[0] }}" height="{{ d.size[1] }}"/>
+          </svg>
+        {% endif %}
+        <div class="field-value" dir="auto">{{ rec.raw if rec.raw is not none else "—" }}</div>
+        {% if rec.reasons %}<ul class="field-reasons">{% for r in rec.reasons %}<li class="{{ 'note' if r.startswith('NOTE_') else '' }}">{{ text.reason(r) }}</li>{% endfor %}</ul>{% endif %}
+        {% if rec.sources %}<p class="sources">مصادر مطابقة: {% for s in rec.sources %}<span>{{ {"ocr": "القارئ الثاني", "ocr_unanchored": "القارئ الثاني (بدون موضع)", "mrz": "السطر الآلي", "cross_doc": "وثيقة أخرى", "reread": "قراءة مكبّرة"}.get(s, s) }}</span>{% endfor %}</p>{% endif %}
+        {% if f.decision %}
+          <p class="decided-note">✔ {{ "تم التأكيد" if f.decision.action == "confirm" else "تم التصحيح إلى: " ~ f.decision.value }}{% if f.decision.note %} · {{ f.decision.note }}{% endif %}</p>
+        {% elif f.flagged and not final %}
+          <div class="field-actions">
+            <form method="post" action="/review/{{ case.id }}/field">
+              <input type="hidden" name="doc_type" value="{{ d.type }}"><input type="hidden" name="field_name" value="{{ f.name }}">
+              <input type="hidden" name="action" value="confirm">
+              <button type="submit" data-key="confirm">تأكيد القيمة</button>
+            </form>
+            <form method="post" action="/review/{{ case.id }}/field" class="edit">
+              <input type="hidden" name="doc_type" value="{{ d.type }}"><input type="hidden" name="field_name" value="{{ f.name }}">
+              <input type="hidden" name="action" value="edit">
+              <input name="value" value="{{ rec.raw or '' }}" aria-label="القيمة الصحيحة" dir="auto" required>
+              <input name="note" placeholder="سبب التصحيح (إلزامي)" aria-label="سبب التصحيح" required>
+              <button type="submit">تصحيح</button>
+            </form>
+          </div>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ol>
+    <figure class="viewer">
+      <div class="stage">
+        <img src="/review/{{ case.id }}/image/{{ d.type }}" alt="{{ text.DOCUMENT.get(d.type, d.type) }}" width="{{ d.size[0] }}" height="{{ d.size[1] }}">
+        <svg class="boxes" viewBox="0 0 {{ d.size[0] }} {{ d.size[1] }}" preserveAspectRatio="none" aria-hidden="true">
+          {% for f in d.fields %}{% set b = f.rec.evidence.box %}{% if b %}
+          <rect class="box band-{{ f.rec.band or 'none' }}" data-box="{{ d.type }}:{{ f.name }}" x="{{ b[0] }}" y="{{ b[1] }}" width="{{ b[2] - b[0] }}" height="{{ b[3] - b[1] }}"/>
+          {% endif %}{% endfor %}
+        </svg>
+      </div>
+    </figure>
+  </div>
+</section>
+{% endfor %}
+
+{% if cross_checks %}
+<section class="cross">
+  <h2>المطابقة بين الوثائق</h2>
+  <ul>{% for c in cross_checks %}<li class="cc-{{ c.result|lower }}"><strong>{{ {"OWNER_NAME": "اسم صاحب النشاط", "TRADE_NAME": "الاسم التجاري"}.get(c.rule, c.rule) }}</strong>: {{ text.CROSS_RESULT.get(c.result, c.result) }}{% for r in c.reasons if not r.endswith("_" ~ c.result) %} · {{ text.reason(r) }}{% endfor %}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if not final %}
+<section class="decision">
+  <form method="post" action="/review/{{ case.id }}/decision">
+    <input type="hidden" name="verdict" value="approve">
+    <button type="submit" class="primary" {% if unresolved %}disabled{% endif %} data-key="approve">الموافقة على الملف</button>
+    {% if unresolved %}<span class="muted">باقي {{ unresolved }} حقل يحتاج قرار قبل الموافقة.</span>{% endif %}
+  </form>
+  <form method="post" action="/review/{{ case.id }}/decision" class="inline">
+    <select name="verdict" aria-label="القرار"><option value="reject">رفض</option><option value="escalate">تصعيد</option></select>
+    <input name="note" placeholder="السبب (إلزامي)" required aria-label="السبب">
+    <button type="submit">تسجيل</button>
+  </form>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}
+{% block foot %}{{ text.NOT_CHECKED }} · {{ result.fingerprint.policy_version if result and result.fingerprint else "" }}{% endblock %}

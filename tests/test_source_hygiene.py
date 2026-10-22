@@ -14,7 +14,16 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = sorted(
     p
-    for pattern in ("src/**/*.py", "tests/**/*.py", "config/**/*.yaml", "tools/**/*.py")
+    for pattern in (
+        "src/**/*.py",
+        "src/**/*.html",
+        "src/**/*.j2",
+        "src/**/*.css",
+        "src/**/*.js",
+        "tests/**/*.py",
+        "config/**/*.yaml",
+        "tools/**/*.py",
+    )
     for p in ROOT.glob(pattern)
 )
 

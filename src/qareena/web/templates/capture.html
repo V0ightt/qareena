@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}قرينة · رفع الوثائق{% endblock %}
+{% block body_class %}applicant{% endblock %}
+{% block main %}
+<section class="card">
+  <h1>صوّر وثائق نشاطك التجاري</h1>
+  <p class="lead">نحتاج أربع صور واضحة. صوّر كل وثيقة على سطح غامق، بضوه زين، وخلّيها كلها داخل الإطار.</p>
+  {% if errors.get("_") %}<p class="error" role="alert">{{ errors["_"] }}</p>{% endif %}
+  <form method="post" action="/cases" enctype="multipart/form-data" class="slots">
+    {% for doc_type in catalog.documents %}
+    <label class="slot" data-check="{{ doc_type }}">
+      <span class="slot-title">{{ text.DOCUMENT[doc_type] }}</span>
+      <input type="file" name="{{ doc_type }}" accept="image/jpeg,image/png,image/webp" capture="environment">
+      <span class="slot-msg" aria-live="polite">{% if errors.get(doc_type) %}<span class="error">{{ errors[doc_type] }}</span>{% endif %}</span>
+    </label>
+    {% endfor %}
+    <button type="submit" class="primary">إرسال الوثائق</button>
+  </form>
+</section>
+<p class="note">ما نتحقق من أصالة الوثائق ولا من الوجه. موظف من الشركة يراجع كل ملف ويوافق عليه.</p>
+{% endblock %}

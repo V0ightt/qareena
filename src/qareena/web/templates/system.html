@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}قرينة · النظام{% endblock %}
+{% block body_class %}reviewer{% endblock %}
+{% block home %}/review{% endblock %}
+{% block nav %}<nav><a href="/review">الملفات</a><a href="/system" aria-current="page">النظام</a></nav>{% endblock %}
+{% block main %}
+<h1>النظام</h1>
+<p class="lead">هذه الصفحة للقراءة فقط. السياسة تتغير بطلب دمج وإعادة اعتماد، وليس من هنا. التحكم الوحيد هنا هو إيقاف الفحص الآلي.</p>
+
+<section class="card {% if kill_switch %}danger{% endif %}">
+  <h2>إيقاف الفحص الآلي</h2>
+  {% if kill_switch %}
+    <p><strong>مفعّل:</strong> كل الملفات تذهب للمراجعة اليدوية.</p>
+  {% else %}
+    <p>غير مفعّل.</p>
+  {% endif %}
+  <form method="post" action="/system/kill-switch" class="inline">
+    <input type="hidden" name="on" value="{{ '0' if kill_switch else '1' }}">
+    <input name="note" placeholder="السبب (إلزامي)" required aria-label="السبب">
+    <button type="submit" class="{{ '' if kill_switch else 'danger' }}">{{ "إعادة التشغيل" if kill_switch else "إيقاف الفحص الآلي" }}</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>الاعتماد</h2>
+  {% if cert %}
+    <p>معتمد لهذه السياسة وهذا النموذج. حدّ الحقول الحرجة: {{ cert.tau_critical if cert.tau_critical is not none else "لا شيء" }} · حدّ الحقول الأخرى: {{ cert.tau_other if cert.tau_other is not none else "لا شيء" }}</p>
+  {% else %}
+    <p><strong>غير معتمد:</strong> لا يُقبل أي حقل آلياً، وكل ملف يحتاج مراجعة.</p>
+  {% endif %}
+  <p class="muted"><code>{{ cert_path }}</code></p>
+</section>
+
+<section class="card">
+  <h2>البصمة</h2>
+  <table class="kv">
+    {% for k, v in fingerprint.items() if k != "features" %}<tr><th><code dir="ltr">{{ k }}</code></th><td><code dir="ltr">{{ v }}</code></td></tr>{% endfor %}
+  </table>
+</section>
+
+<section class="card">
+  <h2>السياسة <code dir="ltr">{{ policy.policy_version }}</code></h2>
+  <table class="kv">
+    <tr><th>الوثائق المطلوبة</th><td>{% for d in policy.packet.required_documents %}{{ text.DOCUMENT.get(d, d) }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+    <tr><th>محاولات إعادة التصوير</th><td>{{ policy.packet.retakes_per_document }}</td></tr>
+    <tr><th>الموافقة الآلية</th><td>{{ "مفعّلة" if policy.packet.auto_approve else "معطّلة: موظف يوافق على كل ملف" }}</td></tr>
+    <tr><th>الخطأ المسموح بين المقبول آلياً</th><td>الحقول الحرجة ≤ <bdi>{{ policy.thresholds.critical.alpha }}</bdi> · الأخرى ≤ <bdi>{{ policy.thresholds.other.alpha }}</bdi> (بثقة {{ (policy.thresholds.critical.confidence * 100)|round|int }}٪)</td></tr>
+    <tr><th>حذف الصور بعد</th><td>{{ policy.retention.image_hours }} ساعة</td></tr>
+    <tr><th>مفتاح التشفير</th><td>{{ "من الإعدادات" if key_configured else "مولّد محلياً (عرض تجريبي)" }}</td></tr>
+  </table>
+</section>
+
+<section class="card">
+  <h2>الخصائص</h2>
+  <table class="kv">{% for k, v in features %}<tr><th><code dir="ltr">{{ k }}</code></th><td>{{ "مفعّلة" if v else "معطّلة" }}</td></tr>{% endfor %}</table>
+</section>
+{% endblock %}
+{% block foot %}{{ text.NOT_CHECKED }}{% endblock %}

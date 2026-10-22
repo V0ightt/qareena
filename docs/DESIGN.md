@@ -394,7 +394,7 @@ Normalisation risks we accept and test:
   - The document viewer has tabs, zoom and rotate. The source box of the selected field is drawn as an SVG overlay.
   - For conflicts, both crops are shown side by side.
 - **Crop first:** for `check` and `review` fields, the crop is shown before the value, to counter automation bias. No button is pre-focused, and **approve is disabled until every flag is resolved**.
-- **Live progress:** the pipeline stages stream to the page over SSE (server-sent events) via HTMX: quality → read → ground → score. A 60–90 s wait never looks like a hang.
+- **Live progress:** the page polls the case status every 2 s and shows a spinner, so a 30–60 s wait never looks like a hang.
 - **Keyboard:**
   - `J` / `K`: move between fields
   - `Enter`: confirm
@@ -432,7 +432,7 @@ Quality-gate starting points. They are **fitted on digital development renders a
 - Glare is flagged when more than 1% of the document area is saturated (Regula's `maxGlaringPart` is 0.01).
 - Laplacian-variance blur thresholds depend on the domain. They are fitted on digital development renders (known blur σ) and the day-1 and development phone photos, then checked on calibration photos.
 
-**Stack:** FastAPI + Jinja2 (autoescape on, never `|safe`) + HTMX + Tailwind with `dir="rtl"` and logical properties. CSP is `default-src 'self'`.
+**Stack:** FastAPI + Jinja2 (autoescape on, never `|safe`), one hand-written RTL stylesheet with logical properties, and a little vanilla JavaScript (ADR-007, revised). CSP is `default-src 'self'`.
 
 ---
 

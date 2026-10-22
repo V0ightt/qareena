@@ -216,6 +216,7 @@ class Settings(BaseSettings):
     config_dir: Path = REPO_ROOT / "config"
     data_dir: Path = REPO_ROOT / "var"
     data_key: SecretStr | None = None
+    reviewer_password: SecretStr | None = None  # web: reviewer and system pages (HTTP Basic)
     gemini_api_key: SecretStr | None = None
     features: Features = Features()
 

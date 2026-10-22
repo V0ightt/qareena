@@ -124,3 +124,13 @@ A sentence on right-to-left reading order added 2–3 fields, which is noise, so
 - Business documents read at 1280 px (chamber) and 1024 px (tax card).
 - A repetition loop or broken JSON is retried once at the other size. It is a model failure on that image, so it never marks the system degraded. If the retry also fails, the document is `READ_FAILED` and goes to review.
 - A reading that the OCR at the field's own label matches **backwards** is `READ_REVERSED`. It gets the crop re-read. If it is still reversed, it is blocked.
+
+**ID cards, same study** (`--docs cards`, 36 images, 336 fields):
+
+| Size | Exact |
+|---|---|
+| 1600 px | 232 |
+| 1280 px | 232 |
+| 1024 px | 208 |
+
+Cards keep 1600 px, the setting validated on day 1: 1280 px is equal within noise, and 1024 px loses detail. So size matters in opposite directions for the two document families. This is why it is set per document type.
