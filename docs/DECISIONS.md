@@ -130,3 +130,20 @@ The format follows lightweight Architecture Decision Records. New decisions are 
   - Tesseract 5 `ara` as the fallback.
   - Our own MRZ check-digit code.
 - **Revisit if** the day-1 spike shows the 4B under-reading Arabic fields that the larger VLM handles at 100% GPU, or RapidOCR's Arabic order or quality fails.
+
+## ADR-013 · Policy is a release, not a toggle; flags and policy live apart
+- **Context.** Big products have admin panels full of switches. Most of Qareena's switches are safety policy. Loosening α or turning off the two-source rule from a screen would silently void the certified error bound.
+- **Decision.**
+  - Policy lives in versioned, content-hashed `config/policy.yaml`. The router only pre-checks under a policy whose thresholds were certified, which is the certification gate.
+  - Engineering feature flags live in typed settings. They double as the ablation switches.
+  - The only runtime control is a kill switch that sends every file to human review.
+  - The workbench gets a read-only «النظام» page.
+  - Every decision carries a fingerprint: policy hash, schema hash, models and flags.
+- **Rejected.** A general feature-flag service or UI. It adds surface and lets safety policy change without re-certification.
+
+## ADR-014 · Our own Arabic normaliser instead of CAMeL Tools
+- **Context.** We need about 40 lines of explicit folding tables (strict / spelling / sound). CAMeL Tools brings heavy dependencies and folds by its own conventions.
+- **Decision.**
+  - `qareena.text.arabic` has three explicit, tested layers.
+  - Code points are written as escapes, and a source-hygiene test blocks invisible bidi characters (Trojan Source).
+- **Revisit if** we need morphology or dialect identification. We do not plan to.

@@ -722,6 +722,30 @@ The judges will hand us at least one input we have never seen. Every case below 
 - Airplane mode is fine, because nothing needs the internet.
 - A fallback recording of each scene, kept in case of hardware failure.
 
+## 17. Configuration and administration
+
+There are three kinds of switch, and they are deliberately kept apart (ADR-013):
+
+| Kind | Where | Owner | How it changes |
+|---|---|---|---|
+| **Policy**: critical fields, α, auto-approval, retakes, retention, name rules, required documents | `config/policy.yaml` | Compliance | A pull request, with a second approver in production. A new version can't pre-check until τ is re-certified (the certification gate) |
+| **Document schema**: fields, labels, formats, cross-check groups | `config/documents.yaml` | Product + compliance | A pull request; templates and tests are updated with it |
+| **Feature flags**: evidence loop, OCR grounding, two-source rule, PDF intake, live guidance, cloud reference | `QAREENA_FEATURES__*` environment | Engineering | Environment or `.env`. Ablations A–D flip these. `cloud_reference` is refused in live mode |
+| **Operations**: kill switch (everything → NEEDS_REVIEW), health, live rates | Workbench «النظام» page | Operator | One button; every use is audited |
+
+Every trace and evaluation report carries a **fingerprint**:
+- policy version and SHA-256
+- schema SHA-256
+- mode, models and feature flags
+
+Any result can therefore be reproduced and explained later.
+
+The «النظام» page is read-only except for the kill switch. It shows:
+- the active policy version
+- the certified thresholds with their bounds
+- the models and flags
+- system health
+
 ## Appendix A — Reviewer interview guide (30 min)
 
 1. Walk me through the last merchant file you reviewed. Which documents, and in what order?

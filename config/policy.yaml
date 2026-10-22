@@ -1,0 +1,36 @@
+# Qareena compliance policy.
+#
+# This file is policy, not a feature toggle. Its content hash is recorded on every decision.
+# A new version cannot pre-check anything until its thresholds are re-certified on the
+# calibration split (the "certification gate"). Change it by pull request; in production a
+# second person approves (maker-checker).
+
+policy_version: "2026-10-22.1"
+
+packet:
+  required_documents:
+    - iq_national_card_front
+    - iq_national_card_back
+    - chamber_of_commerce_id
+    - tax_card
+  retakes_per_document: 3
+  auto_approve: false          # PRE_CHECKED files still need one click from a reviewer
+  audit_sample_rate: 0.05      # only used if auto_approve is ever enabled
+
+thresholds:
+  # Grid is fixed before calibration labels are read; scanned strict -> loose.
+  grid: [0.995, 0.99, 0.98, 0.97, 0.96, 0.95, 0.94, 0.92, 0.90, 0.85, 0.80]
+  critical: { alpha: 0.01, confidence: 0.95, min_accepted: 300 }
+  other:    { alpha: 0.02, confidence: 0.95, min_accepted: 100 }
+
+names:
+  missing_laqab: note          # note | check
+  missing_grandfather: check   # note | check
+  sound_alike: check           # always check: different letters, possibly different people
+
+evidence_loop:
+  max_actions_per_field: 2
+  packet_budget_seconds: 90
+
+retention:
+  image_hours: 24              # demo setting; production follows ZainCash / CBI record rules

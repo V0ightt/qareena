@@ -1,0 +1,58 @@
+# Document schemas for the MVP packet. Layouts are our own fictional SPECIMEN designs;
+# field lists follow the public structure of the documents, never their security features.
+#
+# kind:      name_part | full_name | text | digits | code | date | enum | mrz_line
+# critical:  decision-critical; can only be accepted with two agreeing sources
+# cross:     cross-document group. In owner_name, the ID name_parts are assembled in order
+#            (given, father, grandfather, laqab) and compared with every full_name.
+# date_format uses strftime codes; Arabic-Indic digits are normalised before parsing.
+
+documents:
+  iq_national_card_front:
+    label_ar: "البطاقة الوطنية (الوجه)"
+    fields:
+      national_id_number: { label_ar: "الرقم الوطني", kind: digits, pattern: '^\d{12}$', required: true, critical: true, cross: national_id }
+      card_access_number: { label_ar: "رقم البطاقة", kind: code, pattern: '^[A-Z]{2}\d{7}$', required: true }
+      given_name:         { label_ar: "الاسم", kind: name_part, required: true, critical: true, cross: owner_name }
+      father_name:        { label_ar: "الأب", kind: name_part, required: true, critical: true, cross: owner_name }
+      grandfather_name:   { label_ar: "الجد", kind: name_part, required: true, critical: true, cross: owner_name }
+      laqab:              { label_ar: "اللقب", kind: name_part, required: false, critical: true, cross: owner_name }
+      mother_name:        { label_ar: "الأم", kind: name_part, required: true }
+      mother_father_name: { label_ar: "أب الأم", kind: name_part, required: true }
+      sex:                { label_ar: "الجنس", kind: enum, values: ["ذكر", "أنثى"], required: true }
+      blood_type:         { label_ar: "فصيلة الدم", kind: enum, values: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"], required: false }
+
+  iq_national_card_back:
+    label_ar: "البطاقة الوطنية (الظهر)"
+    fields:
+      issuing_authority: { label_ar: "جهة الإصدار", kind: text, required: true }
+      issue_date:        { label_ar: "تاريخ الإصدار", kind: date, date_format: "%Y/%m/%d", required: true }
+      expiry_date:       { label_ar: "تاريخ النفاذ", kind: date, date_format: "%Y/%m/%d", required: true, critical: true }
+      date_of_birth:     { label_ar: "تاريخ الميلاد", kind: date, date_format: "%Y/%m/%d", required: true, critical: true }
+      place_of_birth:    { label_ar: "محل الولادة", kind: text, required: true }
+      family_number:     { label_ar: "الرقم العائلي", kind: code, pattern: '^[A-Z0-9]{16,18}$', required: true }
+      mrz_line_1:        { label_ar: "السطر المقروء آلياً ١", kind: mrz_line, required: true }
+      mrz_line_2:        { label_ar: "السطر المقروء آلياً ٢", kind: mrz_line, required: true }
+      mrz_line_3:        { label_ar: "السطر المقروء آلياً ٣", kind: mrz_line, required: true }
+
+  chamber_of_commerce_id:
+    label_ar: "هوية غرفة التجارة"
+    fields:
+      member_name:       { label_ar: "اسم العضو", kind: full_name, required: true, critical: true, cross: owner_name }
+      trade_name:        { label_ar: "الاسم التجاري", kind: text, required: true, critical: true, cross: trade_name }
+      membership_number: { label_ar: "رقم العضوية", kind: digits, pattern: '^\d{4,8}$', required: true, critical: true }
+      member_class:      { label_ar: "الدرجة", kind: enum, values: ["ممتازة", "الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة"], required: true }
+      chamber_governorate: { label_ar: "الغرفة", kind: text, required: true }
+      issue_date:        { label_ar: "تاريخ الإصدار", kind: date, date_format: "%d/%m/%Y", required: true }
+      valid_until:       { label_ar: "نافذة لغاية", kind: date, date_format: "%d/%m/%Y", required: true, critical: true }
+      activity:          { label_ar: "النشاط", kind: text, required: true }
+
+  tax_card:
+    label_ar: "البطاقة الضريبية"
+    fields:
+      taxpayer_name: { label_ar: "اسم المكلف", kind: full_name, required: true, critical: true, cross: owner_name }
+      tax_id:        { label_ar: "الرقم الضريبي", kind: digits, pattern: '^\d{10}$', required: true, critical: true }
+      trade_name:    { label_ar: "الاسم التجاري", kind: text, required: true, critical: true, cross: trade_name }
+      tax_office:    { label_ar: "الفرع الضريبي", kind: text, required: true }
+      issue_date:    { label_ar: "تاريخ الإصدار", kind: date, date_format: "%d/%m/%Y", required: true }
+      valid_until:   { label_ar: "نافذة لغاية", kind: date, date_format: "%d/%m/%Y", required: true }

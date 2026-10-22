@@ -22,9 +22,11 @@ The challenge rules require disclosing every model, tool, data source and AI cod
 
 ## Libraries and tools (planned)
 
-Python 3.12, FastAPI, Jinja2, HTMX, Tailwind CSS, Pydantic, OpenCV, Pillow + pillow-heif, pypdfium2, RapidOCR, ONNX Runtime, python-bidi, CAMeL Tools, rapidfuzz, scikit-learn, SciPy, Playwright, Augraphy, albumentations, Faker, SQLite, cryptography, pytest, hypothesis, ruff, uv, GitHub Actions, gitleaks, Ollama.
+Python 3.12, FastAPI, Jinja2, HTMX, Tailwind CSS, Pydantic, OpenCV, Pillow + pillow-heif, pypdfium2, RapidOCR, ONNX Runtime, python-bidi, rapidfuzz, scikit-learn, SciPy, Playwright, Augraphy, albumentations, Faker, SQLite, cryptography, pytest, hypothesis, ruff, uv, GitHub Actions, gitleaks, Ollama.
 
 Design brief: hand-written HTML/CSS rendered to PDF with Microsoft Edge (headless). Fonts are IBM Plex Sans, IBM Plex Sans Arabic and IBM Plex Mono, all under the SIL Open Font License.
+
+Arabic normalisation is our own code (`qareena.text.arabic`), not CAMeL Tools (ADR-014).
 
 ## Data
 
