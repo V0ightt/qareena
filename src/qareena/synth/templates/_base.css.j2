@@ -1,0 +1,42 @@
+@font-face { font-family: "Naskh"; src: url("{{ font("NotoNaskhArabic-VF.ttf") }}"); font-weight: 400 700; }
+@font-face { font-family: "Amiri"; src: url("{{ font("Amiri-Regular.ttf") }}"); font-weight: 400; }
+@font-face { font-family: "Amiri"; src: url("{{ font("Amiri-Bold.ttf") }}"); font-weight: 700; }
+@font-face { font-family: "Ruqaa"; src: url("{{ font("ArefRuqaa-Regular.ttf") }}"); }
+@font-face { font-family: "PlexAr"; src: url("{{ font("IBMPlexSansArabic-Medium.ttf") }}"); font-weight: 500; }
+@font-face { font-family: "PlexAr"; src: url("{{ font("IBMPlexSansArabic-Bold.ttf") }}"); font-weight: 700; }
+@font-face { font-family: "Mono"; src: url("{{ font("IBMPlexMono-Medium.ttf") }}"); }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #ffffff; }
+body { padding: 24px; }
+.card {
+  position: relative; overflow: hidden; direction: rtl;
+  width: 856px; height: 540px; border-radius: 26px;
+  font-family: "{{ style.font }}", "Naskh", serif; color: {{ style.ink }};
+  background: {{ style.paper }};
+}
+.card::before { /* soft printed background: plain gradients, no security patterns */
+  content: ""; position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at 15% 20%, {{ style.tint }} 0%, transparent 55%),
+    radial-gradient(ellipse at 90% 85%, {{ style.tint }} 0%, transparent 50%);
+  opacity: .9;
+}
+.watermark {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  transform: rotate(-24deg); pointer-events: none; z-index: 5;
+  font-family: "PlexAr"; font-weight: 700; font-size: 54px; letter-spacing: 2px;
+  color: {{ style.ink }}; opacity: .08; white-space: nowrap;
+}
+.head { position: relative; z-index: 2; display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 22px 30px 0 30px; }
+.head .t1 { font-family: "PlexAr"; font-weight: 700; font-size: 25px; }
+.head .t2 { font-family: "PlexAr"; font-weight: 500; font-size: 16px; opacity: .8; margin-top: 2px; }
+.head .t3 { direction: ltr; font-family: "PlexAr"; font-weight: 700; font-size: 13px; letter-spacing: 1.5px;
+  color: #a3352b; text-align: left; margin-top: 6px; }
+.body { z-index: 2; }  /* not positioned: children place against .card */
+.lbl { font-family: "PlexAr"; font-weight: 500; font-size: 15px; opacity: .72; }
+.lbl small { font-size: 12px; opacity: .85; margin-inline-start: 12px; }
+.val { font-weight: 700; font-size: 27px; line-height: 1.25; white-space: nowrap; text-align: right; }
+.num { font-family: "{{ style.num_font }}"; direction: {{ style.num_dir }}; unicode-bidi: isolate; }
+.mrz { font-family: "Mono"; direction: ltr; font-size: 25px; letter-spacing: 3.1px; line-height: 1.32; }

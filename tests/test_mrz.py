@@ -113,6 +113,34 @@ def test_round_trip_property(doc, nid, dob, exp, sex):
     assert (m.document_number, m.optional_1, m.birth_date, m.expiry_date) == (doc, nid, dob, exp)
 
 
+def test_canonicalize_fixes_miscounted_fillers_only():
+    from qareena.checks.mrz import canonicalize_fillers
+
+    l1, l2, l3 = ICAO_SPECIMEN
+    sloppy = (l1 + "<<", l2[:18] + "<" * 9 + l2[-1], l3.replace("<<ANNA", "<<<ANNA") + "<<<")
+    fixed, notes = canonicalize_fillers(sloppy)
+    assert fixed == ICAO_SPECIMEN
+    assert len(notes) == 4
+    assert parse_td1(fixed, today=TODAY).valid
+
+
+def test_canonicalize_never_changes_content():
+    from qareena.checks.mrz import canonicalize_fillers
+
+    l1, l2, l3 = ICAO_SPECIMEN
+    # a missing digit inside line 1 is a content error: the line must stay invalid
+    broken = (l1[:10] + l1[11:], l2, l3)
+    fixed, _ = canonicalize_fillers(broken)
+    assert not parse_td1(fixed, today=TODAY).valid
+    # non-filler optional data in line 2 is left alone
+    odd = (l1, l2[:18] + "AB" + "<" * 8 + l2[-1], l3)
+    fixed2, notes2 = canonicalize_fillers(odd)
+    assert fixed2[1] == odd[1]
+    assert not notes2
+    # already-canonical input is untouched
+    assert canonicalize_fillers(ICAO_SPECIMEN) == (ICAO_SPECIMEN, ())
+
+
 def test_generator_refuses_bad_input():
     with pytest.raises(ValueError, match="fit"):
         make_td1(

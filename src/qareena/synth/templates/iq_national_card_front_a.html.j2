@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+.photo { position: absolute; left: 34px; top: 120px; width: 168px; height: 214px; border-radius: 12px;
+  background: {{ style.tint }}; border: 2px solid rgba(0,0,0,.12); z-index: 2; }
+.photo svg { width: 100%; height: 100%; }
+.grid { position: absolute; right: 34px; top: 128px; width: 600px; z-index: 2; display: grid;
+  grid-template-columns: 1fr 1fr; column-gap: 26px; row-gap: 9px; }
+.cell .val { margin-top: 1px; }
+.wide { grid-column: span 2; }
+.nid { position: absolute; left: 34px; top: 352px; width: 168px; text-align: center; z-index: 2; }
+.nid .val { font-size: 22px; }
+</style></head>
+<body><div class="card">
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head">
+    <div><div class="t1">بطاقة تعريف وطنية — نموذج تجريبي</div><div class="t2">کارتی ناسنامە — نموونە</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <div class="body">
+    <div class="photo"><svg viewBox="0 0 100 128"><circle cx="50" cy="44" r="22" fill="rgba(0,0,0,.18)"/><path d="M12 128c4-30 20-42 38-42s34 12 38 42z" fill="rgba(0,0,0,.18)"/></svg></div>
+    <div class="nid">
+      <div class="lbl">الرقم الوطني<small>ژمارەی نیشتمانی</small></div>
+      <div class="val num" data-field="national_id_number">{{ v.national_id_number | digits(style) }}</div>
+    </div>
+    <div class="grid">
+      <div class="cell"><div class="lbl">الاسم<small>ناو</small></div><div class="val" data-field="given_name">{{ v.given_name }}</div></div>
+      <div class="cell"><div class="lbl">الأب<small>باوک</small></div><div class="val" data-field="father_name">{{ v.father_name }}</div></div>
+      <div class="cell"><div class="lbl">الجد<small>باپیر</small></div><div class="val" data-field="grandfather_name">{{ v.grandfather_name }}</div></div>
+      <div class="cell"><div class="lbl">اللقب<small>نازناو</small></div><div class="val" data-field="laqab">{{ v.laqab or "" }}</div></div>
+      <div class="cell"><div class="lbl">الأم<small>دایک</small></div><div class="val" data-field="mother_name">{{ v.mother_name }}</div></div>
+      <div class="cell"><div class="lbl">أب الأم<small>باوکی دایک</small></div><div class="val" data-field="mother_father_name">{{ v.mother_father_name }}</div></div>
+      <div class="cell"><div class="lbl">الجنس<small>ڕەگەز</small></div><div class="val" data-field="sex">{{ v.sex }}</div></div>
+      <div class="cell"><div class="lbl">فصيلة الدم<small>گرووپی خوێن</small></div><div class="val num" data-field="blood_type" style="direction:ltr">{{ v.blood_type }}</div></div>
+      <div class="cell wide"><div class="lbl">رقم البطاقة<small>ژمارەی کارت</small></div><div class="val num" style="direction:ltr; text-align:right; font-family:Mono; font-size:24px" data-field="card_access_number">{{ v.card_access_number }}</div></div>
+    </div>
+  </div>
+</div></body></html>

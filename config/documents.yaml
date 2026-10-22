@@ -5,32 +5,33 @@
 # critical:  decision-critical; can only be accepted with two agreeing sources
 # cross:     cross-document group. In owner_name, the ID name_parts are assembled in order
 #            (given, father, grandfather, laqab) and compared with every full_name.
+# aliases:   other printed labels for the field (e.g. the Kurdish label); used to detect label echo
 # date_format uses strftime codes; Arabic-Indic digits are normalised before parsing.
 
 documents:
   iq_national_card_front:
     label_ar: "البطاقة الوطنية (الوجه)"
     fields:
-      national_id_number: { label_ar: "الرقم الوطني", kind: digits, pattern: '^\d{12}$', required: true, critical: true, cross: national_id }
-      card_access_number: { label_ar: "رقم البطاقة", kind: code, pattern: '^[A-Z]{2}\d{7}$', required: true }
-      given_name:         { label_ar: "الاسم", kind: name_part, required: true, critical: true, cross: owner_name }
-      father_name:        { label_ar: "الأب", kind: name_part, required: true, critical: true, cross: owner_name }
-      grandfather_name:   { label_ar: "الجد", kind: name_part, required: true, critical: true, cross: owner_name }
-      laqab:              { label_ar: "اللقب", kind: name_part, required: false, critical: true, cross: owner_name }
-      mother_name:        { label_ar: "الأم", kind: name_part, required: true }
-      mother_father_name: { label_ar: "أب الأم", kind: name_part, required: true }
-      sex:                { label_ar: "الجنس", kind: enum, values: ["ذكر", "أنثى"], required: true }
-      blood_type:         { label_ar: "فصيلة الدم", kind: enum, values: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"], required: false }
+      national_id_number: { label_ar: "الرقم الوطني", aliases: ["ژمارەی نیشتمانی"], kind: digits, pattern: '^\d{12}$', required: true, critical: true, cross: national_id }
+      card_access_number: { label_ar: "رقم البطاقة", aliases: ["ژمارەی کارت"], kind: code, pattern: '^[A-Z]{2}\d{7}$', required: true }
+      given_name: { label_ar: "الاسم", aliases: ["ناو"], kind: name_part, required: true, critical: true, cross: owner_name }
+      father_name: { label_ar: "الأب", aliases: ["باوک"], kind: name_part, required: true, critical: true, cross: owner_name }
+      grandfather_name: { label_ar: "الجد", aliases: ["باپیر"], kind: name_part, required: true, critical: true, cross: owner_name }
+      laqab: { label_ar: "اللقب", aliases: ["نازناو"], kind: name_part, required: false, critical: true, cross: owner_name }
+      mother_name: { label_ar: "الأم", aliases: ["دایک"], kind: name_part, required: true }
+      mother_father_name: { label_ar: "أب الأم", aliases: ["باوکی دایک"], kind: name_part, required: true }
+      sex: { label_ar: "الجنس", aliases: ["ڕەگەز"], kind: enum, values: ["ذكر", "أنثى"], required: true }
+      blood_type: { label_ar: "فصيلة الدم", aliases: ["گرووپی خوێن"], kind: enum, values: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"], required: false }
 
   iq_national_card_back:
     label_ar: "البطاقة الوطنية (الظهر)"
     fields:
-      issuing_authority: { label_ar: "جهة الإصدار", kind: text, required: true }
-      issue_date:        { label_ar: "تاريخ الإصدار", kind: date, date_format: "%Y/%m/%d", required: true }
-      expiry_date:       { label_ar: "تاريخ النفاذ", kind: date, date_format: "%Y/%m/%d", required: true, critical: true }
-      date_of_birth:     { label_ar: "تاريخ الميلاد", kind: date, date_format: "%Y/%m/%d", required: true, critical: true }
-      place_of_birth:    { label_ar: "محل الولادة", kind: text, required: true }
-      family_number:     { label_ar: "الرقم العائلي", kind: code, pattern: '^[A-Z0-9]{16,18}$', required: true }
+      issuing_authority: { label_ar: "جهة الإصدار", aliases: ["دەسەڵاتی دەرکردن"], kind: text, required: true }
+      issue_date: { label_ar: "تاريخ الإصدار", aliases: ["ڕێکەوتی دەرکردن"], kind: date, date_format: "%Y/%m/%d", required: true }
+      expiry_date: { label_ar: "تاريخ النفاذ", aliases: ["ڕێکەوتی بەسەرچوون"], kind: date, date_format: "%Y/%m/%d", required: true, critical: true }
+      date_of_birth: { label_ar: "تاريخ الميلاد", aliases: ["ڕێکەوتی لەدایکبوون"], kind: date, date_format: "%Y/%m/%d", required: true, critical: true }
+      place_of_birth: { label_ar: "محل الولادة", aliases: ["شوێنی لەدایکبوون"], kind: text, required: true }
+      family_number: { label_ar: "الرقم العائلي", aliases: ["ژمارەی خێزان"], kind: code, pattern: '^[A-Z0-9]{16,18}$', required: true }
       mrz_line_1:        { label_ar: "السطر المقروء آلياً ١", kind: mrz_line, required: true }
       mrz_line_2:        { label_ar: "السطر المقروء آلياً ٢", kind: mrz_line, required: true }
       mrz_line_3:        { label_ar: "السطر المقروء آلياً ٣", kind: mrz_line, required: true }

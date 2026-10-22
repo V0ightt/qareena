@@ -55,6 +55,7 @@ class FieldSpec(_Frozen):
     values: tuple[str, ...] | None = None
     date_format: str | None = None
     cross: str | None = None
+    aliases: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def _consistent(self) -> FieldSpec:
@@ -84,6 +85,15 @@ class Catalog(_Frozen):
 
     def field(self, doc_type: str, name: str) -> FieldSpec:
         return self.documents[doc_type].fields[name]
+
+    def printed_labels(self) -> frozenset[str]:
+        """Every label string the catalog knows (Arabic labels and aliases), for label-echo checks."""
+        return frozenset(
+            label
+            for doc in self.documents.values()
+            for spec in doc.fields.values()
+            for label in (spec.label_ar, *spec.aliases)
+        )
 
     def cross_groups(self) -> dict[str, list[tuple[str, str]]]:
         """Map each cross-document group to its (doc_type, field) members, in schema order."""

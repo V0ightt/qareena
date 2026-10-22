@@ -152,6 +152,49 @@ def make_td1(
     return l1, l2, l3
 
 
+def canonicalize_fillers(lines: list[str] | tuple[str, ...]) -> tuple[tuple[str, str, str], tuple[str, ...]]:
+    """Fix miscounted '<' filler runs without touching any letter or digit.
+
+    Readers (human or model) often miscount long runs of '<'. Fillers carry no information
+    except position, so re-padding them is safe; every value is still proven by its check
+    digit afterwards. Only these cases are handled, anything else is returned unchanged:
+
+    * line 1: positions 1-15 intact, then optional data followed only by fillers
+    * line 2: 18 fixed characters, an all-filler optional block, then the composite digit
+    * line 3: trailing fillers, and runs of 3+ '<' between name parts (-> '<<')
+
+    Returns the canonical lines and a description of each change, for the evidence trace.
+    """
+    rows = ["".join(r.split()).upper() for r in lines]
+    rows = ([*rows, "", "", ""])[:3]
+    notes: list[str] = []
+    l1, l2, l3 = rows
+
+    if len(l1) != LINE_LEN and len(l1) >= 15:
+        head, tail = l1[:15], l1[15:]
+        content = tail.rstrip("<")
+        if "<" not in content and len(content) <= 15:
+            l1 = head + content.ljust(15, "<")
+            notes.append(f"line 1 filler re-padded ({len(rows[0])} -> 30)")
+
+    if len(l2) != LINE_LEN and len(l2) >= 19:
+        head, middle, last = l2[:18], l2[18:-1], l2[-1]
+        if set(middle) <= {"<"} and last.isdigit():
+            l2 = head + "<" * 11 + last
+            notes.append(f"line 2 optional-data filler re-padded ({len(rows[1])} -> 30)")
+
+    stripped = l3.rstrip("<")
+    name = re.sub(r"(?<=[A-Z])<{3,}(?=[A-Z])", "<<", stripped)
+    if name != stripped:
+        notes.append("line 3 name separator collapsed to '<<'")
+    if len(name) <= LINE_LEN:
+        new3 = name.ljust(LINE_LEN, "<")
+        if len(l3) != LINE_LEN:
+            notes.append(f"line 3 filler re-padded ({len(l3)} -> 30)")
+        l3 = new3
+    return (l1, l2, l3), tuple(notes)
+
+
 # --- internals ------------------------------------------------------------------------
 
 

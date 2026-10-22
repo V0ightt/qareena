@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+.grid { position: absolute; right: 34px; top: 112px; width: 790px; display: grid;
+  grid-template-columns: 1.3fr 1fr; column-gap: 30px; row-gap: 10px; z-index: 2; }
+.mrzbox { position: absolute; left: 0; right: 0; bottom: 0; height: 132px; padding: 14px 30px;
+  background: rgba(255,255,255,.55); z-index: 2; }
+</style></head>
+<body><div class="card">
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head">
+    <div><div class="t1">نموذج تجريبي — الظهر</div><div class="t2">نموونە — پشتەوە</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <div class="grid">
+    <div class="cell"><div class="lbl">جهة الإصدار<small>دەسەڵاتی دەرکردن</small></div><div class="val" style="font-size:23px" data-field="issuing_authority">{{ v.issuing_authority }}</div></div>
+    <div class="cell"><div class="lbl">محل الولادة<small>شوێنی لەدایکبوون</small></div><div class="val" data-field="place_of_birth">{{ v.place_of_birth }}</div></div>
+    <div class="cell"><div class="lbl">تاريخ الإصدار<small>ڕێکەوتی دەرکردن</small></div><div class="val num" data-field="issue_date">{{ v.issue_date | date_fmt("%Y/%m/%d", style) }}</div></div>
+    <div class="cell"><div class="lbl">تاريخ الميلاد<small>ڕێکەوتی لەدایکبوون</small></div><div class="val num" data-field="date_of_birth">{{ v.date_of_birth | date_fmt("%Y/%m/%d", style) }}</div></div>
+    <div class="cell"><div class="lbl">تاريخ النفاذ<small>ڕێکەوتی بەسەرچوون</small></div><div class="val num" data-field="expiry_date">{{ v.expiry_date | date_fmt("%Y/%m/%d", style) }}</div></div>
+    <div class="cell"><div class="lbl">الرقم العائلي<small>ژمارەی خێزان</small></div><div class="val num" style="direction:ltr; text-align:right; font-family:Mono; font-size:21px" data-field="family_number">{{ v.family_number }}</div></div>
+  </div>
+  <div class="mrzbox">
+    <div class="mrz" data-field="mrz_line_1">{{ v.mrz[0] }}</div>
+    <div class="mrz" data-field="mrz_line_2">{{ v.mrz[1] }}</div>
+    <div class="mrz" data-field="mrz_line_3">{{ v.mrz[2] }}</div>
+  </div>
+</div></body></html>
