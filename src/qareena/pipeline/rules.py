@@ -50,9 +50,13 @@ def apply_field_rules(doc: DocumentRead, catalog: Catalog) -> None:
             rec.add_reason(err, blocking=True)
         ev = rec.evidence
         if ev.ocr_matches >= 1 and ev.ocr_similarity >= OCR_EXACT:
-            rec.add_source(Source.OCR)
+            # Only a match at the field's own printed label is independent evidence; on a layout
+            # whose labels we cannot find, a match elsewhere is a signal for the scorer only.
+            rec.add_source(Source.OCR if ev.ocr_anchored else Source.OCR_UNANCHORED)
             if ev.ocr_matches > 1:
                 rec.add_reason("OCR_AMBIGUOUS_BOX")
+        elif ev.ocr_foreign:  # the value is printed, but at another field's label: a field shift
+            rec.add_reason("VALUE_AT_OTHER_LABEL", blocking=spec.critical)
         else:
             rec.add_reason("NOT_GROUNDED")
 
@@ -99,8 +103,14 @@ def _mrz_rules(front: DocumentRead | None, back: DocumentRead, today: dt.date) -
         for r in raw:
             r.add_reason("MRZ_CHECK_FAILED")  # type: ignore[union-attr]
         return
-    for r in raw:
+    for r, line in zip(raw, mrz.lines, strict=True):
         r.add_source(Source.MRZ)  # type: ignore[union-attr]
+        if "NOT_GROUNDED" in r.reasons:  # type: ignore[union-attr]
+            r.reasons.remove("NOT_GROUNDED")  # type: ignore[union-attr]  # check digits outrank OCR here
+        if r.value != line:  # type: ignore[union-attr]
+            # filler count or O/0-type repairs, kept only because every check digit passes
+            r.value = line  # type: ignore[union-attr]
+            r.add_reason("NOTE_MRZ_REPAIRED")  # type: ignore[union-attr]
     pairs = [
         (back, "date_of_birth", mrz.birth_date.isoformat() if mrz.birth_date else None, True),
         (back, "expiry_date", mrz.expiry_date.isoformat() if mrz.expiry_date else None, True),

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+/* Held-out layout (Test-B only): a paper form with a ruled table and shaded label cells. */
+.card { width: 1000px; height: 700px; border-radius: 4px; }
+table { position: absolute; right: 50px; top: 150px; width: 900px; border-collapse: collapse; z-index: 2; }
+td { border: 1px solid rgba(0,0,0,.35); padding: 10px 12px; }
+td.lbl { width: 220px; background: rgba(0,0,0,.05); opacity: 1; }
+td .val { font-size: 25px; }
+{% if v.get('injection') %}.inj { position: absolute; right: 50px; left: 50px; bottom: 40px; font-family: "Naskh"; font-size: 17px;
+  color: {{ style.ink }}; z-index: 3; }{% endif %}
+</style></head>
+<body><div class="card">
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head" style="padding-top: 40px">
+    <div><div class="t1">شهادة تسجيل ضريبي — نموذج تجريبي</div><div class="t2">الهيئة النموذجية للضرائب</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <table>
+    <tr><td class="lbl">رقم المكلف الضريبي</td><td><div class="val num" data-field="tax_id">{{ v.tax_id | digits(style) }}</div></td></tr>
+    <tr><td class="lbl">المكلف</td><td><div class="val" data-field="taxpayer_name">{{ v.taxpayer_name }}</div></td></tr>
+    <tr><td class="lbl">اسم المحل التجاري</td><td><div class="val" data-field="trade_name">{{ v.trade_name }}</div></td></tr>
+    <tr><td class="lbl">الفرع</td><td><div class="val" data-field="tax_office">{{ v.tax_office }}</div></td></tr>
+    <tr><td class="lbl">تاريخ التسجيل</td><td><div class="val num" data-field="issue_date">{{ v.issue_date | date_fmt("%d/%m/%Y", style) }}</div></td></tr>
+    <tr><td class="lbl">تاريخ الانتهاء</td><td><div class="val num" data-field="valid_until">{{ v.valid_until | date_fmt("%d/%m/%Y", style) }}</div></td></tr>
+  </table>
+  {% if v.get('injection') %}<div class="inj" data-field="_injection">{{ v.injection }}</div>{% endif %}
+</div></body></html>

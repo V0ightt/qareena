@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+/* Held-out layout (Test-B only): header band, inline "label: value" rows, reworded labels. */
+.band { position: absolute; left: 0; right: 0; top: 0; height: 84px; background: {{ style.ink }}; z-index: 1; }
+.head { color: #ffffff; }
+.head .t3 { color: #ffd9d2; }
+.photo { position: absolute; left: 30px; top: 104px; width: 150px; height: 190px; border-radius: 4px;
+  background: {{ style.tint }}; border: 3px solid #ffffff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); z-index: 2; }
+.photo svg { width: 100%; height: 100%; }
+.rows { position: absolute; right: 30px; left: 206px; top: 100px; z-index: 2; }
+.row { display: flex; align-items: baseline; gap: 10px; height: 41px; }
+.row .lbl { flex: none; width: 168px; }
+.row .lbl::after { content: ":"; }
+.row .val { font-family: "PlexAr"; font-weight: 700; font-size: 23px; }
+.ids { position: absolute; left: 30px; right: 30px; bottom: 22px; display: flex; justify-content: space-between;
+  border-top: 1px dashed rgba(0,0,0,.25); padding-top: 8px; z-index: 2; }
+.ids .val { font-size: 22px; }
+</style></head>
+<body><div class="card">
+  <div class="band"></div>
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head">
+    <div><div class="t1">البطاقة الموحدة — نموذج تجريبي</div><div class="t2">کارتی یەکگرتوو — نموونە</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <div class="photo"><svg viewBox="0 0 100 128"><circle cx="50" cy="44" r="22" fill="rgba(0,0,0,.18)"/><path d="M12 128c4-30 20-42 38-42s34 12 38 42z" fill="rgba(0,0,0,.18)"/></svg></div>
+  <div class="rows">
+    <div class="row"><div class="lbl">الاسم الأول / ناو</div><div class="val" data-field="given_name">{{ v.given_name }}</div></div>
+    <div class="row"><div class="lbl">اسم الأب / باوک</div><div class="val" data-field="father_name">{{ v.father_name }}</div></div>
+    <div class="row"><div class="lbl">اسم الجد / باپیر</div><div class="val" data-field="grandfather_name">{{ v.grandfather_name }}</div></div>
+    <div class="row"><div class="lbl">اللقب / نازناو</div><div class="val" data-field="laqab">{{ v.laqab or "" }}</div></div>
+    <div class="row"><div class="lbl">اسم الأم / دایک</div><div class="val" data-field="mother_name">{{ v.mother_name }}</div></div>
+    <div class="row"><div class="lbl">اسم أب الأم</div><div class="val" data-field="mother_father_name">{{ v.mother_father_name }}</div></div>
+    <div class="row"><div class="lbl">الجنس / ڕەگەز</div><div class="val" data-field="sex">{{ v.sex }}</div>
+      <div class="lbl" style="width:auto; margin-inline-start:40px">فصيلة الدم</div><div class="val num" style="direction:ltr" data-field="blood_type">{{ v.blood_type }}</div></div>
+  </div>
+  <div class="ids">
+    <div><div class="lbl">الرقم الوطني / ژمارەی نیشتمانی</div><div class="val num" data-field="national_id_number">{{ v.national_id_number | digits(style) }}</div></div>
+    <div><div class="lbl">رقم البطاقة</div><div class="val" style="direction:ltr; font-family:Mono; font-size:21px" data-field="card_access_number">{{ v.card_access_number }}</div></div>
+  </div>
+</div></body></html>

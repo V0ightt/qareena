@@ -20,8 +20,9 @@ from test_rules import TODAY, base_values
 
 
 class FakeVlm:
-    def __init__(self, values, fail=()):
+    def __init__(self, values, fail=(), crop=None):
         self.values, self.fail, self.calls = values, set(fail), []
+        self.crop = crop or {}  # (doc_type, field) -> answer to a crop re-read
 
     def read(self, doc_type, png):
         self.calls.append(doc_type)
@@ -32,25 +33,58 @@ class FakeVlm:
 
     def read_field(self, doc_type, field, png):
         self.calls.append(f"{doc_type}.{field}")
-        return self.values[doc_type].get(field)
+        return self.crop.get((doc_type, field), self.values[doc_type].get(field))
+
+
+# Each test document gets its own card tint, so the fake OCR can tell which one it is reading
+# (rectification resizes every card to the same size).
+TINTS = {
+    "iq_national_card_front": (236, 240, 244),
+    "iq_national_card_back": (222, 240, 244),
+    "chamber_of_commerce_id": (236, 224, 244),
+    "tax_card": (236, 240, 226),
+}
+
+
+def _row(text, x0, x1, y, h, score=0.97):
+    return OcrLine(str(text), score, ((x0, y), (x1, y), (x1, y + h), (x0, y + h)))
 
 
 class FakeOcr:
-    """Pretends the OCR engine read every value exactly (grounded)."""
+    """Reads each document like a real card: every printed label with its value to its left
+    (Arabic reading order), MRZ lines unlabelled at the bottom. Every value is read exactly."""
 
-    def __init__(self, values):
-        self.lines = [
-            OcrLine(str(v), 0.97, ((0, i * 30), (300, i * 30), (300, i * 30 + 25), (0, i * 30 + 25)))
-            for i, v in enumerate(x for d in values.values() for x in d.values() if x)
-        ]
+    def __init__(self, values, catalog, labels=True):
+        self.pages = {}
+        for doc_type, vals in values.items():
+            lines = []
+            for i, (name, spec) in enumerate(catalog.documents[doc_type].fields.items()):
+                y = 40 + 60 * i
+                if labels and spec.kind.value != "mrz_line":
+                    lines.append(_row(spec.label_ar, 1350, 1600, y + 5, 30))
+                if vals.get(name):
+                    lines.append(_row(vals[name], 700, 1300, y, 40))
+            self.pages[doc_type] = tuple(lines)
 
     def read(self, image):
-        return OcrResult(tuple(self.lines), 0.01, image.shape[1], image.shape[0])
+        h, w = image.shape[:2]
+        tint = np.median(image.reshape(-1, 3), axis=0)
+        doc = min(TINTS, key=lambda d: float(np.abs(np.array(TINTS[d]) - tint).sum()))
+        return OcrResult(self.pages.get(doc, ()), 0.01, w, h)
+
+
+def tinted(doc_type, img):
+    out = img.copy()
+    out[(img == (236, 240, 244)).all(axis=2)] = TINTS[doc_type]
+    return out
 
 
 def images(blur=()):
-    good = on_table(card())
-    return {d: (degrade.gaussian_blur(good, 6.0) if d in blur else good) for d in base_values()}
+    imgs = {}
+    for d in base_values():
+        good = on_table(tinted(d, card()))
+        imgs[d] = degrade.gaussian_blur(good, 6.0) if d in blur else good
+    return imgs
 
 
 @pytest.fixture
@@ -76,10 +110,12 @@ def certify(runtime, tau=0.5):
     )
 
 
-def run(runtime, values=None, **kw):
+def run(runtime, values=None, *, printed=None, crop=None, labels=True, **kw):
+    """``values``: what the VLM reads; ``printed``: what is on the card (the OCR reads it exactly)."""
     values = values or base_values()
-    vlm = FakeVlm(values, kw.pop("fail", ()))
-    p = Pipeline(runtime, vlm, FakeOcr(values), today=TODAY)
+    vlm = FakeVlm(values, kw.pop("fail", ()), crop)
+    ocr = FakeOcr(printed or values, runtime.catalog, labels=labels)
+    p = Pipeline(runtime, vlm, ocr, today=TODAY)
     try:
         return p.run("PKT-1", kw.pop("imgs", images()), **kw), vlm
     finally:
@@ -172,3 +208,71 @@ def test_wrong_document_is_detected(runtime):
 
 def test_unused_numpy_import_guard():
     assert np is not None
+
+
+def test_field_shift_is_blocked_even_though_the_value_is_on_the_card(runtime):
+    """The VLM returned the grandfather's name as the father's: it is printed, but elsewhere."""
+    certify(runtime)
+    read = base_values()
+    read["iq_national_card_front"]["father_name"] = "حسين"
+    result, _ = run(runtime, values=read, printed=base_values())
+    father = result.documents["iq_national_card_front"].fields["father_name"]
+    assert "VALUE_AT_OTHER_LABEL" in father.reasons
+    assert father.band == Band.REVIEW
+    assert result.outcome == Outcome.NEEDS_REVIEW
+
+
+def test_label_echo_is_recovered_by_a_crop_reread_and_then_checked_normally(runtime):
+    certify(runtime)
+    read = base_values()
+    read["iq_national_card_back"]["issuing_authority"] = "دەسەڵاتی دەرکردن"  # its Kurdish label
+    right = base_values()["iq_national_card_back"]["issuing_authority"]
+    result, vlm = run(
+        runtime,
+        values=read,
+        printed=base_values(),
+        crop={("iq_national_card_back", "issuing_authority"): right},
+    )
+    rec = result.documents["iq_national_card_back"].fields["issuing_authority"]
+    assert "iq_national_card_back.issuing_authority" in vlm.calls
+    assert rec.value == right
+    assert rec.evidence.first_raw == "دەسەڵاتی دەرکردن"
+    assert "NOTE_RECOVERED_FROM_CROP" in rec.reasons
+    assert "LABEL_ECHO" not in rec.reasons
+    assert result.outcome == Outcome.PRE_CHECKED, result.reasons
+
+
+def test_unrecovered_label_echo_stays_unread(runtime):
+    certify(runtime)
+    read = base_values()
+    read["iq_national_card_back"]["issuing_authority"] = "دەسەڵاتی دەرکردن"
+    result, _ = run(
+        runtime,
+        values=read,
+        printed=base_values(),
+        crop={("iq_national_card_back", "issuing_authority"): None},
+    )
+    rec = result.documents["iq_national_card_back"].fields["issuing_authority"]
+    assert rec.value is None
+    assert "LABEL_ECHO" in rec.reasons
+    assert result.outcome == Outcome.NEEDS_REVIEW
+
+
+def test_mrz_misread_fillers_and_o_zero_are_repaired_only_with_valid_check_digits(runtime):
+    certify(runtime)
+    read = base_values()
+    good = read["iq_national_card_back"]["mrz_line_2"]
+    read["iq_national_card_back"]["mrz_line_2"] = good.replace("UTO", "UT0").replace("<<<", "<<<<<<", 1)
+    result, _ = run(runtime, values=read, printed=base_values())
+    rec = result.documents["iq_national_card_back"].fields["mrz_line_2"]
+    assert rec.value == good
+    assert "NOTE_MRZ_REPAIRED" in rec.reasons
+    assert result.outcome == Outcome.PRE_CHECKED, result.reasons
+
+
+def test_on_a_layout_without_known_labels_ocr_alone_cannot_accept_a_critical_field(runtime):
+    certify(runtime)
+    result, _ = run(runtime, labels=False)
+    tax_id = result.documents["tax_card"].fields["tax_id"]  # critical, and no MRZ or other document has it
+    assert tax_id.band != Band.ACCEPT
+    assert result.outcome == Outcome.NEEDS_REVIEW

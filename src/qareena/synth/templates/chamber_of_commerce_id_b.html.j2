@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+.card { width: 1000px; height: 700px; border-radius: 4px; }  /* a paper certificate */
+.frame { position: absolute; inset: 18px; border: 2px solid {{ style.ink }}; opacity: .35; border-radius: 4px; z-index: 1; }
+table { position: absolute; right: 50px; left: 50px; top: 150px; border-collapse: collapse; z-index: 2; }
+td { border-bottom: 1px solid rgba(0,0,0,.12); padding: 9px 6px; vertical-align: bottom; }
+td.lbl { width: 190px; }
+td .val { font-size: 27px; }
+.dates { position: absolute; right: 50px; left: 50px; bottom: 60px; display: flex; justify-content: space-between; z-index: 2; }
+.dates .val { font-size: 24px; }
+</style></head>
+<body><div class="card">
+  <div class="frame"></div>
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head" style="padding-top: 40px">
+    <div><div class="t1">شهادة عضوية — نموذج تجريبي</div><div class="t2" data-field="chamber_governorate">{{ v.chamber_governorate }}</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <table>
+    <tr><td class="lbl">رقم العضوية</td><td><div class="val num" data-field="membership_number">{{ v.membership_number | digits(style) }}</div></td></tr>
+    <tr><td class="lbl">اسم العضو</td><td><div class="val" data-field="member_name">{{ v.member_name }}</div></td></tr>
+    <tr><td class="lbl">الاسم التجاري</td><td><div class="val" data-field="trade_name">{{ v.trade_name }}</div></td></tr>
+    <tr><td class="lbl">النشاط</td><td><div class="val" style="font-size:23px" data-field="activity">{{ v.activity }}</div></td></tr>
+    <tr><td class="lbl">الدرجة</td><td><div class="val" data-field="member_class">{{ v.member_class }}</div></td></tr>
+  </table>
+  <div class="dates">
+    <div><div class="lbl">تاريخ الإصدار</div><div class="val num" data-field="issue_date">{{ v.issue_date | date_fmt("%d/%m/%Y", style) }}</div></div>
+    <div><div class="lbl">نافذة لغاية</div><div class="val num" data-field="valid_until">{{ v.valid_until | date_fmt("%d/%m/%Y", style) }}</div></div>
+  </div>
+</div></body></html>

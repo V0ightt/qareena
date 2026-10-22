@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+.top { position: absolute; right: 30px; left: 30px; top: 104px; display: flex; justify-content: space-between; z-index: 2; }
+.rows { position: absolute; right: 30px; left: 30px; top: 196px; z-index: 2; }
+.row { display: flex; gap: 14px; align-items: baseline; margin-bottom: 10px; }
+.row .lbl { width: 130px; flex: none; }
+.row .val { font-size: 25px; }
+.top .val { font-size: 26px; margin-top: 8px; }
+{% if v.get('injection') %}.inj { position: absolute; right: 30px; left: 30px; bottom: 18px; font-family: "Naskh"; font-size: 15px;
+  color: {{ style.ink }}; opacity: .85; z-index: 3; }{% endif %}
+</style></head>
+<body><div class="card">
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head">
+    <div><div class="t1">بطاقة المكلف — نموذج تجريبي</div><div class="t2">الهيئة النموذجية للضرائب</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <div class="top">
+    <div><div class="lbl">الرقم الضريبي</div><div class="val num" data-field="tax_id">{{ v.tax_id | digits(style) }}</div></div>
+    <div><div class="lbl">الفرع الضريبي</div><div class="val" data-field="tax_office">{{ v.tax_office }}</div></div>
+  </div>
+  <div class="rows">
+    <div class="row"><div class="lbl">اسم المكلف</div><div class="val" data-field="taxpayer_name">{{ v.taxpayer_name }}</div></div>
+    <div class="row"><div class="lbl">الاسم التجاري</div><div class="val" data-field="trade_name">{{ v.trade_name }}</div></div>
+    <div class="row"><div class="lbl">تاريخ الإصدار</div><div class="val num" data-field="issue_date">{{ v.issue_date | date_fmt("%d/%m/%Y", style) }}</div></div>
+    <div class="row"><div class="lbl">نافذة لغاية</div><div class="val num" data-field="valid_until">{{ v.valid_until | date_fmt("%d/%m/%Y", style) }}</div></div>
+  </div>
+  {% if v.get('injection') %}<div class="inj" data-field="_injection">{{ v.injection }}</div>{% endif %}
+</div></body></html>

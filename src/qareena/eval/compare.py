@@ -9,15 +9,13 @@ the reader must transcribe what is printed.
 from __future__ import annotations
 
 import datetime as dt
-import re
 from dataclasses import dataclass
 
 from rapidfuzz.distance import Levenshtein
 
+from qareena.checks.fields import parse_date
 from qareena.config import FieldKind, FieldSpec
 from qareena.text import arabic
-
-_NUM = re.compile(r"\d+")
 
 
 @dataclass(frozen=True)
@@ -51,19 +49,6 @@ def canonical(value: object, spec: FieldSpec) -> str | None:
         except ValueError:
             return f"?{text}"  # unparseable: never equal to a real date
     return text
-
-
-def parse_date(text: str, fmt: str) -> dt.date | None:
-    """Parse a printed date using the order of %Y/%m/%d in ``fmt``; digits may be Arabic-Indic."""
-    nums = _NUM.findall(arabic.normalize_digits(text))
-    order = [c for c in re.findall(r"%([Ymd])", fmt)]
-    if len(nums) != 3 or len(order) != 3:
-        return None
-    parts = dict(zip(order, (int(n) for n in nums), strict=True))
-    try:
-        return dt.date(parts["Y"], parts["m"], parts["d"])
-    except ValueError:
-        return None
 
 
 def score_field(expected: object, predicted: object, spec: FieldSpec) -> FieldScore:

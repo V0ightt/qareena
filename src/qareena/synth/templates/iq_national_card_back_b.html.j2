@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+.cols { position: absolute; right: 30px; left: 30px; top: 104px; display: grid; grid-template-columns: repeat(3, 1fr);
+  column-gap: 22px; row-gap: 12px; z-index: 2; }
+.cell { background: rgba(255,255,255,.35); border-radius: 8px; padding: 6px 10px; }
+.cell .lbl .ku { display: block; font-size: 11px; line-height: 1.5; opacity: .75; }
+.cell .lbl { margin-bottom: 6px; }
+.cell .val { font-size: 23px; }
+.mrzbox { position: absolute; left: 0; right: 0; bottom: 0; height: 128px; padding: 12px 28px;
+  background: rgba(255,255,255,.6); z-index: 2; }
+</style></head>
+<body><div class="card">
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head">
+    <div><div class="t1">الظهر — نموذج تجريبي</div><div class="t2">پشتەوە — نموونە</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <div class="cols">
+    <div class="cell"><div class="lbl"><span class="ku">ڕێکەوتی لەدایکبوون</span>تاريخ الميلاد</div><div class="val num" data-field="date_of_birth">{{ v.date_of_birth | date_fmt("%Y/%m/%d", style) }}</div></div>
+    <div class="cell"><div class="lbl"><span class="ku">ڕێکەوتی دەرکردن</span>تاريخ الإصدار</div><div class="val num" data-field="issue_date">{{ v.issue_date | date_fmt("%Y/%m/%d", style) }}</div></div>
+    <div class="cell"><div class="lbl"><span class="ku">ڕێکەوتی بەسەرچوون</span>تاريخ النفاذ</div><div class="val num" data-field="expiry_date">{{ v.expiry_date | date_fmt("%Y/%m/%d", style) }}</div></div>
+    <div class="cell"><div class="lbl"><span class="ku">شوێنی لەدایکبوون</span>محل الولادة</div><div class="val" data-field="place_of_birth">{{ v.place_of_birth }}</div></div>
+    <div class="cell" style="grid-column: span 2"><div class="lbl"><span class="ku">دەسەڵاتی دەرکردن</span>جهة الإصدار</div><div class="val" data-field="issuing_authority">{{ v.issuing_authority }}</div></div>
+    <div class="cell" style="grid-column: span 3"><div class="lbl"><span class="ku">ژمارەی خێزان</span>الرقم العائلي</div><div class="val" style="direction:ltr; text-align:right; font-family:Mono; font-size:21px" data-field="family_number">{{ v.family_number }}</div></div>
+  </div>
+  <div class="mrzbox">
+    <div class="mrz" data-field="mrz_line_1">{{ v.mrz[0] }}</div>
+    <div class="mrz" data-field="mrz_line_2">{{ v.mrz[1] }}</div>
+    <div class="mrz" data-field="mrz_line_3">{{ v.mrz[2] }}</div>
+  </div>
+</div></body></html>

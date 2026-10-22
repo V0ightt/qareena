@@ -25,7 +25,8 @@ FEATURES = (
     "bias",
     "lp_min",
     "lp_mean",
-    "ocr_any",
+    "src_ocr",  # anchored at the field's own label
+    "ocr_unanchored",
     "ocr_ambiguous",
     "ocr_similarity",
     "ocr_score",
@@ -33,6 +34,7 @@ FEATURES = (
     "src_cross_doc",
     "src_reread",
     "n_caution",
+    "recovered",
     "kind_name",
     "kind_number",
     "kind_date",
@@ -50,6 +52,7 @@ def features(rec: FieldRecord, kind: FieldKind) -> list[float]:
         max(ev.lp_min, -20.0) if ev.lp_min is not None else -5.0,
         max(ev.lp_mean, -20.0) if ev.lp_mean is not None else -5.0,
         float(Source.OCR in rec.sources),
+        float(Source.OCR_UNANCHORED in rec.sources),
         float(ev.ocr_matches > 1),
         ev.ocr_similarity,
         ev.ocr_score or 0.0,
@@ -57,6 +60,7 @@ def features(rec: FieldRecord, kind: FieldKind) -> list[float]:
         float(Source.CROSS_DOC in rec.sources),
         float(Source.REREAD in rec.sources),
         float(len(caution)),
+        float("NOTE_RECOVERED_FROM_CROP" in rec.reasons),
         float(kind in NAME_KINDS),
         float(kind in NUMBER_KINDS),
         float(kind == FieldKind.DATE),
@@ -82,7 +86,8 @@ class LogisticScorer:
 
 # Hand-set, uncertified weights: plausible ordering for display while no certificate exists.
 PROVISIONAL = LogisticScorer(
-    weights=(-1.0, 0.6, 0.4, 2.0, -0.8, 1.5, 1.0, 2.0, 1.5, 1.2, -1.2, -0.3, -0.2, 0.0, 0.0), certified=False
+    weights=(-1.0, 0.6, 0.4, 2.0, 0.8, -0.8, 1.5, 1.0, 2.0, 1.5, 1.2, -1.2, -0.5, -0.3, -0.2, 0.0, 0.0),
+    certified=False,
 )
 
 

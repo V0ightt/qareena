@@ -3,7 +3,7 @@ import time
 import numpy as np
 
 from qareena.config import Settings, load_runtime
-from qareena.pipeline.loop import Budget, crop_near_label, label_box, needs_evidence, run_loop
+from qareena.pipeline.loop import Budget, crop_near_label, needs_evidence, run_loop
 from qareena.pipeline.records import DocumentRead, FieldRecord, Source
 from qareena.readers.ocr import OcrLine
 
@@ -16,8 +16,9 @@ LINES = [
 ]
 
 
-def record(value="حسين", critical=True, sources=()):
+def record(value="حسين", critical=True, sources=(), label_box=(1500, 260, 1640, 290)):
     rec = FieldRecord(doc_type=DOC, field="grandfather_name", raw=value, value=value, critical=critical)
+    rec.evidence.label_box = label_box
     for s in sources:
         rec.add_source(s)
     rec.add_reason("NOT_GROUNDED")
@@ -28,14 +29,12 @@ def doc_with(rec):
     return DocumentRead(doc_type=DOC, image_id="x", fields={"grandfather_name": rec}, ocr_lines=LINES)
 
 
+def box_line(text, x, y, w=80, h=30):
+    return OcrLine(text, 0.95, ((x, y), (x + w, y), (x + w, y + h), (x, y + h)))
+
+
 def budget(n=2, seconds=60):
     return Budget(n, time.perf_counter() + seconds)
-
-
-def test_label_is_found_by_arabic_or_kurdish_text():
-    spec = RT.catalog.field(DOC, "grandfather_name")
-    assert label_box(spec, LINES) == (1500, 260, 1640, 290)
-    assert label_box(spec, [{"text": "باپیر", "score": 1, "box": [1, 2, 3, 4]}]) == (1, 2, 3, 4)
 
 
 def test_crop_covers_the_area_below_and_beside_an_rtl_label():
@@ -60,7 +59,7 @@ def test_reocr_match_adds_an_independent_source_and_stops():
         RT.catalog,
         budget=budget(),
         reread=lambda *a: calls.append("reread") or "حسين",
-        reocr=lambda img: [OcrLine("حسين", 0.95, ((0, 0), (9, 0), (9, 9), (0, 9)))],
+        reocr=lambda img: [box_line("الجد", 300, 20), box_line("حسين", 300, 60)],
     )
     assert Source.OCR in rec.sources
     assert "NOT_GROUNDED" not in rec.reasons
@@ -100,3 +99,32 @@ def test_budget_is_respected():
         )
         == []
     )
+
+
+def test_reocr_match_at_another_label_inside_the_crop_is_not_independent():
+    """A crop can hold the next row's value; matching it there must not count as evidence."""
+    rec = record(value="علي")  # the VLM's grandfather is really the laqab row's value
+    run_loop(
+        doc_with(rec),
+        IMG,
+        RT.catalog,
+        budget=budget(n=1),
+        reread=lambda *a: None,
+        reocr=lambda img: [
+            box_line("الجد", 400, 20),
+            box_line("حسين", 280, 20),
+            box_line("اللقب", 400, 80),
+            box_line("علي", 280, 80),
+        ],
+    )
+    assert Source.OCR not in rec.sources
+    assert needs_evidence(rec)
+
+
+def test_field_without_a_found_label_is_flagged_not_searched():
+    rec = record(label_box=None)
+    actions = run_loop(
+        doc_with(rec), IMG, RT.catalog, budget=budget(), reread=lambda *a: "حسين", reocr=lambda img: []
+    )
+    assert actions == []
+    assert "LABEL_NOT_FOUND" in rec.reasons

@@ -147,3 +147,23 @@ The format follows lightweight Architecture Decision Records. New decisions are 
   - `qareena.text.arabic` has three explicit, tested layers.
   - Code points are written as escapes, and a source-hygiene test blocks invisible bidi characters (Trojan Source).
 - **Revisit if** we need morphology or dialect identification. We do not plan to.
+
+## ADR-015 · OCR evidence counts only at the field's own printed label
+- **Context.** In the day-1 spike, 4 of 40 cards (one clean) had a critical name field holding *another* field's value: the grandfather's name returned as the father's. That value is printed on the card, so "the OCR also read it somewhere" would have confirmed a wrong answer and quietly broken the two-source rule (ADR-004).
+- **Decision.**
+  - `grounding.map_labels` finds each field's printed label in the OCR output: whole tokens, longest label first, an edit budget for OCR misreads, and labels split across two boxes. Each label then claims the text that follows it in Arabic reading order: to its left on the row, else the first row below.
+  - Only a match on a line claimed by that field is `Source.OCR`.
+  - A value found only at another field's label is `VALUE_AT_OTHER_LABEL`, blocking for critical fields.
+  - If the label is not found (an unfamiliar layout), a match on an unclaimed line is `Source.OCR_UNANCHORED`: a scorer feature, never independent evidence.
+  - The evidence loop's crop re-OCR is anchored the same way, because a crop can contain the next row's value.
+- **Evidence.** 0 stolen lines on 1,072 fields over 11 packets and 3 layouts; 99.6% of value lines claimed by the right field on fresh packets (`docs/spike/2026-10-22-day1-stack-decision.md`).
+- **Cost.** Fewer acceptances on layouts whose labels we do not know: their critical fields need MRZ or cross-document evidence. This is deliberate.
+- **Rejected.** Template coordinates per layout (they do not survive a new layout or a phone photo), and global one-to-one assignment of OCR lines to fields (legitimately repeated names, e.g. a father and grandfather both called علي, break it).
+
+## ADR-016 · Printed Arabic labels are the JSON keys; label echoes get one crop re-read
+- **Context.** With English keys the model matched `issuing_authority` to the Kurdish label «دەسەڵاتی دەرکردن» (which means "issuing authority") 20 times out of 20. Listing labels as never-values did not help.
+- **Decision.**
+  - JSON keys are the printed Arabic labels, plus one paragraph on how bilingual labels look (variant v3 in the A/B: exact 237 → 256 of 342, same latency, best on the held-out layout).
+  - A required field answered with a label or with spelled-out glyphs is read once more, from a crop at its label (`Pipeline._recover`, at most 4 per document).
+  - The new answer has no logprobs, so it scores lower. It goes through every rule, and is marked `NOTE_RECOVERED_FROM_CROP` with the first answer kept for the trace.
+- **Rejected.** {label, value} pairs (v2). Same accuracy, 60% slower.

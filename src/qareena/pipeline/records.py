@@ -28,7 +28,8 @@ class Outcome(StrEnum):
 class Source(StrEnum):
     """Independent evidence that agrees with the VLM's reading of a field."""
 
-    OCR = "ocr"  # the OCR engine read the same value, unambiguously
+    OCR = "ocr"  # the OCR engine read the same value at this field's printed label
+    OCR_UNANCHORED = "ocr_unanchored"  # ... somewhere unclaimed, but the label was not found: a signal only
     MRZ = "mrz"  # the machine-readable zone (check digits valid) carries the same value
     CROSS_DOC = "cross_doc"  # another document carries the same value
     REREAD = "reread"  # a zoomed re-read of the field's crop returned the same value
@@ -38,7 +39,11 @@ class Evidence(BaseModel):
     ocr_matches: int = 0
     ocr_similarity: float = 0.0
     ocr_score: float | None = None
+    ocr_anchored: bool = False  # the field's printed label was found and the match sits at it
+    ocr_foreign: bool = False  # the value was found only at another field's label (a field shift)
     box: tuple[float, float, float, float] | None = None  # pixels on the read image
+    label_box: tuple[float, float, float, float] | None = None  # the field's printed label, if found
+    first_raw: str | None = None  # the full-page answer, when a crop re-read replaced it
     lp_min: float | None = None
     lp_mean: float | None = None
     lp_tokens: int = 0

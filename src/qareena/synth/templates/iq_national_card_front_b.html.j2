@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+.photo { position: absolute; right: 30px; top: 118px; width: 160px; height: 205px; border-radius: 8px;
+  background: {{ style.tint }}; border: 2px solid rgba(0,0,0,.14); z-index: 2; }
+.photo svg { width: 100%; height: 100%; }
+.list { position: absolute; right: 220px; left: 30px; top: 112px; z-index: 2; }
+.item { display: grid; grid-template-columns: 150px 1fr; align-items: end; border-bottom: 1px solid rgba(0,0,0,.08);
+  padding: 3px 0 4px 0; }
+.item .lbl { line-height: 1.05; }
+.item .lbl .ku { display: block; font-size: 11px; line-height: 1.5; opacity: .75; }
+.item .val { font-size: 24px; }
+.nid { position: absolute; right: 30px; top: 340px; width: 160px; text-align: center; z-index: 2; }
+.nid .val { font-size: 21px; }
+</style></head>
+<body><div class="card">
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head">
+    <div><div class="t1">هوية تعريف — نموذج تجريبي</div><div class="t2">ناسنامە — نموونە</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <div class="photo"><svg viewBox="0 0 100 128"><circle cx="50" cy="44" r="22" fill="rgba(0,0,0,.18)"/><path d="M12 128c4-30 20-42 38-42s34 12 38 42z" fill="rgba(0,0,0,.18)"/></svg></div>
+  <div class="nid"><div class="lbl">الرقم الوطني</div><div class="val num" data-field="national_id_number">{{ v.national_id_number | digits(style) }}</div></div>
+  <div class="list">
+    <div class="item"><div class="lbl"><span class="ku">ناو</span>الاسم</div><div class="val" data-field="given_name">{{ v.given_name }}</div></div>
+    <div class="item"><div class="lbl"><span class="ku">باوک</span>الأب</div><div class="val" data-field="father_name">{{ v.father_name }}</div></div>
+    <div class="item"><div class="lbl"><span class="ku">باپیر</span>الجد</div><div class="val" data-field="grandfather_name">{{ v.grandfather_name }}</div></div>
+    <div class="item"><div class="lbl"><span class="ku">نازناو</span>اللقب</div><div class="val" data-field="laqab">{{ v.laqab or "" }}</div></div>
+    <div class="item"><div class="lbl"><span class="ku">دایک</span>الأم</div><div class="val" data-field="mother_name">{{ v.mother_name }}</div></div>
+    <div class="item"><div class="lbl"><span class="ku">باوکی دایک</span>أب الأم</div><div class="val" data-field="mother_father_name">{{ v.mother_father_name }}</div></div>
+    <div class="item"><div class="lbl"><span class="ku">ڕەگەز</span>الجنس</div><div class="val" data-field="sex">{{ v.sex }}</div></div>
+    <div class="item"><div class="lbl"><span class="ku">گرووپی خوێن</span>فصيلة الدم</div><div class="val num" style="direction:ltr" data-field="blood_type">{{ v.blood_type }}</div></div>
+    <div class="item"><div class="lbl"><span class="ku">ژمارەی کارت</span>رقم البطاقة</div><div class="val" style="direction:ltr; font-family:Mono; font-size:22px" data-field="card_access_number">{{ v.card_access_number }}</div></div>
+  </div>
+</div></body></html>

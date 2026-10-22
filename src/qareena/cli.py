@@ -26,8 +26,13 @@ def _synth_packet(args: argparse.Namespace) -> int:
     with Renderer() as r:
         for doc_type, values in packet.values.items():
             style = rng.choice(sorted(STYLES))
-            res = r.render(f"{doc_type}_a", values, args.out / f"{doc_type}.png", style=style)
-            boxes[doc_type] = {"style": style, "size": [res.width, res.height], "boxes": res.boxes}
+            res = r.render(f"{doc_type}_{args.layout}", values, args.out / f"{doc_type}.png", style=style)
+            boxes[doc_type] = {
+                "layout": args.layout,
+                "style": style,
+                "size": [res.width, res.height],
+                "boxes": res.boxes,
+            }
     truth = {
         "packet_id": packet.packet_id,
         "scenario": packet.scenario,
@@ -110,6 +115,9 @@ def _status(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):  # Arabic output on a legacy Windows console
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     from qareena.synth.packets import SCENARIOS
 
     ap = argparse.ArgumentParser(prog="qareena", description="Qareena local-first KYC document agent")
@@ -117,6 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("synth-packet", help="render a fictional SPECIMEN packet with ground truth")
     s.add_argument("--scenario", default="clean", choices=SCENARIOS)
     s.add_argument("--seed", type=int, default=1)
+    s.add_argument("--layout", default="a", choices=("a", "b", "c"), help="c is the held-out layout")
     s.add_argument("--today", help="ISO date used for validity (default: today)")
     s.add_argument("--out", type=Path, required=True)
     s.set_defaults(func=_synth_packet)

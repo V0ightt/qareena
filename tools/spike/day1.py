@@ -28,7 +28,7 @@ from qareena.config import Settings, load_runtime
 from qareena.eval.compare import score_field
 from qareena.readers.ocr import ArabicOcr
 from qareena.readers.ollama import OllamaClient
-from qareena.readers.prompts import SYSTEM, field_schema, user_prompt
+from qareena.readers.prompts import SYSTEM, field_schema, json_keys, user_prompt
 from qareena.synth import degrade
 from qareena.synth.profiles import ISSUER, make_person
 from qareena.synth.render import Renderer, write_ground_truth
@@ -122,8 +122,9 @@ def run_vlm(client: OllamaClient, model: str, item: dict, runtime) -> dict:
     )
     scores = {}
     labels = runtime.catalog.printed_labels()
+    data = {field: (res.data or {}).get(key) for key, field in json_keys(doc).items()}
     for f, spec in doc.fields.items():
-        pred = res.data.get(f) if res.data else None
+        pred = data.get(f)
         s = score_field(item["gt"].get(f), pred, spec)
         # what the system keeps after its deterministic checks (label echo / garbled -> null)
         kept = None if pred is not None and (label_echo(str(pred), labels) or garbled(str(pred))) else pred
@@ -141,7 +142,7 @@ def run_vlm(client: OllamaClient, model: str, item: dict, runtime) -> dict:
         }
     mrz_valid = None
     if item["doc_type"] == "iq_national_card_back" and res.data:
-        lines = [res.data.get(f"mrz_line_{k}") or "" for k in (1, 2, 3)]
+        lines = [data.get(f"mrz_line_{k}") or "" for k in (1, 2, 3)]
         mrz_valid = read_td1(lines, today=TODAY)[0].valid
     tokens = [t.token for t in res.logprobs]
     return {

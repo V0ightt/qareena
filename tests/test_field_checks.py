@@ -57,3 +57,32 @@ def test_normal_values_are_not_garbled(value):
 @pytest.mark.parametrize("value", ["دايك", "باوك", "ناو"])
 def test_kurdish_labels_respelled_in_arabic_are_echoes(value):
     assert label_echo(value, LABELS) is not None
+
+
+DATE_YMD = FieldSpec(label_ar="d", kind="date", date_format="%Y/%m/%d")
+DATE_DMY = FieldSpec(label_ar="d", kind="date", date_format="%d/%m/%Y")
+
+
+@pytest.mark.parametrize(
+    ("value", "spec", "expected"),
+    [
+        ("٢٠٣٠/٠٣/٢٦", DATE_YMD, None),  # as printed, Arabic-Indic digits
+        ("2030/3/26", DATE_YMD, None),
+        ("31/12/2026", DATE_DMY, None),
+        ("?1995", DATE_YMD, "DATE_UNPARSEABLE"),  # glare hid most of it (spike run 2)
+        ("2030/02/30", DATE_YMD, "DATE_UNPARSEABLE"),
+        ("2030-03-26", DATE_YMD, "DATE_FORMAT_DIFFERS"),  # ISO: taken from the MRZ, not the field
+        ("31-12-2026", DATE_DMY, "DATE_FORMAT_DIFFERS"),
+        ("2026/12/31", DATE_DMY, "DATE_UNPARSEABLE"),  # year first cannot be read day-first
+    ],
+)
+def test_dates_must_be_whole_and_copied_as_printed(value, spec, expected):
+    assert format_error(value, spec) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("ال", "NAME_TRUNCATED"), ("الع", "NAME_TRUNCATED"), ("الجبوري", None), ("عز", None)],
+)
+def test_a_name_part_is_more_than_the_article(value, expected):
+    assert format_error(value, NAME) == expected

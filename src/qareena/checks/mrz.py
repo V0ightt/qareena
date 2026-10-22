@@ -52,6 +52,7 @@ class TD1:
     secondary_names: tuple[str, ...]
     checks: dict[str, bool] = field(default_factory=dict)
     errors: tuple[str, ...] = ()
+    lines: tuple[str, ...] = ()  # the three 30-character lines exactly as parsed
 
     @property
     def valid(self) -> bool:
@@ -93,6 +94,15 @@ def parse_td1(lines: list[str] | tuple[str, ...] | str, *, today: dt.date | None
     }
     birth = _parse_date(l2[0:6], today, kind="birth")
     expiry = _parse_date(l2[8:14], today, kind="expiry")
+    # ICAO 9303 alphabetic fields that no check digit protects: a digit here is a misread
+    if not _alpha(l1[0:5]):
+        errors.append("document code or issuer is not alphabetic")
+    if l2[7] not in "MFX<":
+        errors.append("sex is not M, F, X or <")
+    if not _alpha(l2[15:18]):
+        errors.append("nationality is not alphabetic")
+    if not _alpha(l3):
+        errors.append("name line is not alphabetic")
     if birth is None:
         errors.append("birth date is not a valid YYMMDD date")
     if expiry is None:
@@ -112,6 +122,7 @@ def parse_td1(lines: list[str] | tuple[str, ...] | str, *, today: dt.date | None
         secondary_names=tuple(p for p in secondary.split("<") if p),
         checks=checks,
         errors=tuple(errors),
+        lines=(l1, l2, l3),
     )
 
 
@@ -269,6 +280,10 @@ def read_td1(
 
 
 # --- internals ------------------------------------------------------------------------
+
+
+def _alpha(text: str) -> bool:
+    return all("A" <= ch <= "Z" or ch == "<" for ch in text)
 
 
 def _safe(line: str) -> str:

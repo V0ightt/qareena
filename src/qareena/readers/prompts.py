@@ -1,10 +1,15 @@
 """Extraction prompts and JSON schemas, generated from the document catalog.
 
-The schema allows ``null`` for every field and requires every key, so the model must make an
-explicit decision per field. Prompts insist on verbatim transcription (no translation, no
-correction, digits as printed) and on null when any character is uncertain: a permissive
-prompt is what makes models fill unreadable fields with plausible text. Document text is
-declared to be data: instructions printed on a document are ignored.
+The JSON keys are the **Arabic labels printed on the document**, not English field names. In
+the day-1 spike the model matched English keys to the Kurdish label by meaning (it returned
+«دەسەڵاتی دەرکردن», "issuing authority", as the issuing authority 20/20 times); with printed
+labels as keys plus one sentence on how bilingual labels look, exact fields rose from 237 to
+256 of 342 at the same latency (``tools/spike/prompt_ab.py``, variant v3). The prompt text
+below is the tested variant: change it only together with a new A/B run.
+
+The schema allows ``null`` for every field and requires every key, so the model must decide
+per field. The system prompt insists on verbatim transcription and on null when any character
+is uncertain, and declares document text to be data, never instructions.
 """
 
 from __future__ import annotations
@@ -28,30 +33,64 @@ SYSTEM = (
     "6. Return only JSON that matches the schema."
 )
 
+LOCATE = (
+    "Each field on this document has a small label: an Arabic label, often followed by a smaller "
+    "Kurdish translation of the same label (for example «ناو» next to «الاسم», «دەسەڵاتی دەرکردن» "
+    "next to «جهة الإصدار»). Both words are the LABEL. The VALUE is the larger, bolder text printed "
+    "beside or below that label pair. Return the value only."
+)
+
+VALUE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"value": {"type": ["string", "null"]}},
+    "required": ["value"],
+    "additionalProperties": False,
+}
+
+
+def json_keys(doc: DocumentSpec) -> dict[str, str]:
+    """JSON key (the printed Arabic label) -> field name. Labels must be unique per document."""
+    keys = {spec.label_ar: name for name, spec in doc.fields.items()}
+    if len(keys) != len(doc.fields):
+        raise ValueError(f"{doc.label_ar}: two fields share a printed label; JSON keys must be unique")
+    return keys
+
 
 def field_schema(doc: DocumentSpec) -> dict[str, Any]:
-    props = {name: {"type": ["string", "null"]} for name in doc.fields}
+    keys = json_keys(doc)
     return {
         "type": "object",
-        "properties": props,
-        "required": list(doc.fields),
+        "properties": {k: {"type": ["string", "null"]} for k in keys},
+        "required": list(keys),
         "additionalProperties": False,
     }
 
 
 def user_prompt(doc: DocumentSpec) -> str:
-    lines = [f"Document: {doc.label_ar}", "Fields to transcribe (JSON key: printed label):"]
+    lines = [
+        f"Document: {doc.label_ar}",
+        "The JSON keys are the Arabic labels printed on the document. For each key, find that label "
+        "(or the label with the same meaning) on the document and return the value printed with it.",
+    ]
     for name, spec in doc.fields.items():
-        hint = {
-            FieldKind.DATE: " (a date; copy it as printed)",
-            FieldKind.MRZ_LINE: " (one line of the machine-readable zone, 30 characters of A-Z, 0-9 and <)",
-            FieldKind.DIGITS: " (digits only)",
-        }.get(spec.kind, "")
-        lines.append(f"- {name}: {spec.label_ar}{hint}")
-    printed = [lab for spec in doc.fields.values() for lab in (spec.label_ar, *spec.aliases)]
-    lines.append(
-        "These words are printed LABELS on the document (Arabic, and Kurdish in Arabic script). "
-        "They are never values; do not return any of them: " + " ، ".join(printed)
-    )
+        if spec.kind == FieldKind.DATE:
+            lines.append(f"- «{spec.label_ar}» is a date; copy it as printed.")
+        elif spec.kind == FieldKind.MRZ_LINE:
+            lines.append(
+                f"- «{spec.label_ar}» is line {name[-1]} of the machine-readable zone (30 characters)."
+            )
+    lines.append(LOCATE)
     lines.append("Return the JSON object now.")
     return "\n".join(lines)
+
+
+def crop_prompt(doc: DocumentSpec, field: str) -> str:
+    """Re-read of one field from a close-up crop around its printed label."""
+    spec = doc.fields[field]
+    kurdish = f" (Kurdish: «{'», «'.join(spec.aliases)}»)" if spec.aliases else ""
+    return (
+        f"This image is a close-up crop of the document «{doc.label_ar}» around the label "
+        f"«{spec.label_ar}»{kurdish}.\n"
+        "Transcribe only the value printed with that label, exactly as printed. The label words, in "
+        "Arabic or Kurdish, are never the value. Return null if you cannot read every character."
+    )

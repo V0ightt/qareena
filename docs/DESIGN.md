@@ -201,14 +201,13 @@ Following Anthropic's *Building effective agents*, Qareena is an **agentic workf
 
 | Action | When | Effect |
 |---|---|---|
-| `reread_crop(doc, field, scale, enhance)` | Readers disagree, or OCR found no match, and crop quality is acceptable | The VLM reads a 2–3× zoomed crop with a field-specific prompt |
-| `reocr(doc, region, prep)` | Low OCR confidence | Re-OCR after deskew, upscaling, CLAHE or a 90° rotation |
+| `reocr(doc, field)` | A critical field has a value but no independent source | The OCR engine reads a 2× upscaled crop around the field's printed label. A match **at that label inside the crop** adds `ocr` (ADR-015) |
+| `reread(doc, field)` | Still no independent source | The VLM reads the same crop with a field-specific prompt. Agreement adds `reread`, which is a **signal for the scorer, not a source**: the same model agreeing with itself repeats its errors. Disagreement adds `REREAD_DISAGREES` |
 | `escalate(field, reason_code)` | Anything else, or budget spent | Reviewer item with evidence |
 
-**Policy (MVP, deterministic). The first matching row wins:**
-1. VLM ≠ OCR, or OCR found 0 matches, and rereads remain → `reread_crop`
-2. OCR confidence is low and re-OCRs remain → `reocr`
-3. Otherwise → `escalate`
+**Policy (MVP, deterministic):** `reocr` first (independent, and cheap on the CPU), then `reread`, then escalate. A field whose printed label cannot be found gets `LABEL_NOT_FOUND` and is escalated without spending actions.
+
+**Before the loop: recovering label echoes (ADR-016).** A required field answered with a printed label or spelled-out glyphs is read once more, from a crop at its label. This happens at most 4 times per document. The new answer goes through every rule and is marked `NOTE_RECOVERED_FROM_CROP`.
 
 **Retake is a routing outcome, not a loop action.** If a field's root cause is photo quality (glare, blur, cut corner, finger, too dark) and the document has retakes left (max 3), the router sets `AWAITING_RETAKE` with that reason code.
 
@@ -257,7 +256,7 @@ For required fields, null is scored separately (§9).
 The two targets must be consistent with each other. If each of 20 accepted fields were wrong 2% of the time, 33% of pre-checked packets would contain an error. At 1% with 10 fields it would still be about 10%. So a critical field is auto-accepted **only when two independent sources agree**:
 - **Front ↔ MRZ.** Covers ID number, date of birth and expiry, and the MRZ carries ICAO check digits.
 - **ID ↔ license ↔ tax card.** Covers names and trade name.
-- **VLM ↔ OCR, plus a zoomed re-read.** For fields that appear only once, such as membership number and tax ID.
+- **VLM ↔ OCR at the field's own label (ADR-015).** For fields that appear only once, such as membership number and tax ID. An OCR match elsewhere on the page does not count: it is how a field shift (the grandfather's name returned as the father's) would get confirmed. A zoomed re-read by the same VLM is a scorer signal, never the second source.
 
 The MRZ name line is Latin script, and Iraqi transliteration is not standardised. It is shown as a hint, never used as a decisive cross-check.
 

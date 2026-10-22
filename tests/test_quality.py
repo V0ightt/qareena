@@ -93,3 +93,21 @@ def test_coverage_accepts_numpy_float_boxes():
     mask = np.zeros((100, 100), np.float32)
     mask[10:50, 10:50] = 1.0
     assert degrade.coverage(mask, tuple(np.float64(v) for v in (10, 10, 50, 50)), threshold=0.9) == 1.0
+
+
+def test_white_printed_strip_with_text_is_not_glare():
+    """Layout C prints the MRZ on pure white: clipped, but the ink on it survives."""
+    img = card()
+    img[380:500, 40:816] = 255
+    for x in range(60, 790, 24):  # MRZ-like characters
+        cv2.rectangle(img, (x, 400), (x + 14, 430), (20, 20, 20), -1)
+        cv2.rectangle(img, (x, 450), (x + 14, 480), (20, 20, 20), -1)
+    assert glare_fraction(img) == pytest.approx(0.0, abs=2e-3)
+
+
+def test_tight_crop_with_a_full_width_band_is_not_a_cut_corner():
+    """A dark header band spanning the frame has four corners on the frame: not a cut-off card."""
+    img = card()
+    img[0:90, :] = (60, 40, 20)
+    q = assess(img)
+    assert q.reason != "CUT_CORNER"

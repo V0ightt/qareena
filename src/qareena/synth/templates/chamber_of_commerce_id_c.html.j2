@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+/* Held-out layout (Test-B only): a wallet card with a header band and reworded labels. */
+.band { position: absolute; left: 0; right: 0; top: 0; height: 84px; background: {{ style.ink }}; z-index: 1; }
+.head { color: #ffffff; }
+.head .t3 { color: #ffd9d2; }
+.gov { position: absolute; right: 30px; top: 96px; z-index: 2; font-family: "PlexAr"; font-weight: 700; font-size: 20px; }
+.rows { position: absolute; right: 30px; left: 30px; top: 140px; z-index: 2; }
+.row { display: flex; align-items: baseline; gap: 10px; height: 46px; border-bottom: 1px dotted rgba(0,0,0,.2); }
+.row .lbl { flex: none; width: 170px; }
+.row .val { font-size: 25px; }
+.foot { position: absolute; right: 30px; left: 30px; bottom: 24px; display: flex; gap: 60px; z-index: 2; }
+.foot .val { font-size: 22px; }
+</style></head>
+<body><div class="card">
+  <div class="band"></div>
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head">
+    <div><div class="t1">بطاقة عضوية تجارية — نموذج تجريبي</div><div class="t2">اتحاد الغرف النموذجي</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <div class="gov" data-field="chamber_governorate">{{ v.chamber_governorate }}</div>
+  <div class="rows">
+    <div class="row"><div class="lbl">اسم صاحب العضوية</div><div class="val" data-field="member_name">{{ v.member_name }}</div></div>
+    <div class="row"><div class="lbl">اسم المحل التجاري</div><div class="val" data-field="trade_name">{{ v.trade_name }}</div></div>
+    <div class="row"><div class="lbl">نوع النشاط</div><div class="val" style="font-size:22px" data-field="activity">{{ v.activity }}</div></div>
+    <div class="row"><div class="lbl">رقم الانتساب</div><div class="val num" data-field="membership_number">{{ v.membership_number | digits(style) }}</div>
+      <div class="lbl" style="width:auto; margin-inline-start:50px">الصنف</div><div class="val" data-field="member_class">{{ v.member_class }}</div></div>
+  </div>
+  <div class="foot">
+    <div><div class="lbl">صدرت في</div><div class="val num" data-field="issue_date">{{ v.issue_date | date_fmt("%d/%m/%Y", style) }}</div></div>
+    <div><div class="lbl">تنتهي في</div><div class="val num" data-field="valid_until">{{ v.valid_until | date_fmt("%d/%m/%Y", style) }}</div></div>
+  </div>
+</div></body></html>

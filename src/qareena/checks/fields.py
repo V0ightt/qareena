@@ -5,6 +5,7 @@ These never accept anything on their own; they can only demote a field (to null 
 
 from __future__ import annotations
 
+import datetime as dt
 import re
 
 from rapidfuzz.distance import Levenshtein
@@ -21,6 +22,8 @@ BOILERPLATE = (
 )
 _SHORT_LABEL = 5  # labels shorter than this must match exactly, so real names are never flagged
 _FUZZY = 0.8
+_NUM = re.compile(r"\d+")
+_ARTICLE = "ال"
 
 
 def label_echo(value: str, labels: frozenset[str] | set[str]) -> str | None:
@@ -62,9 +65,37 @@ def garbled(value: str) -> bool:
     return bool(_GARBLED.match(text)) and sum(ch.isalpha() for ch in text) >= 3
 
 
+def parse_date(text: str, fmt: str) -> dt.date | None:
+    """Parse a printed date using the order of %Y/%m/%d in ``fmt``; digits may be Arabic-Indic."""
+    nums = _NUM.findall(arabic.normalize_digits(text))
+    order = re.findall(r"%([Ymd])", fmt)
+    if len(nums) != 3 or len(order) != 3:
+        return None
+    parts = dict(zip(order, (int(n) for n in nums), strict=True))
+    try:
+        return dt.date(parts["Y"], parts["m"], parts["d"])
+    except ValueError:
+        return None
+
+
+def _date_shape(fmt: str) -> str:
+    """'%d/%m/%Y' -> a regex for the printed shape, separators included."""
+    return re.escape(fmt).replace("%Y", r"\d{4}").replace("%m", r"\d{1,2}").replace("%d", r"\d{1,2}")
+
+
 def format_error(value: str, spec: FieldSpec) -> str | None:
     """Kind- and pattern-level validation on the canonical (strict, ASCII-digit) value."""
     text = arabic.strict(value)
+    if spec.kind == FieldKind.DATE:
+        fmt, compact = spec.date_format or "%Y/%m/%d", text.replace(" ", "")
+        if parse_date(compact, fmt) is None:
+            return "DATE_UNPARSEABLE"  # a partial date such as «?1995»
+        if not re.fullmatch(_date_shape(fmt), compact):
+            return "DATE_FORMAT_DIFFERS"  # not copied as printed, e.g. ISO taken from the MRZ
+    if spec.kind == FieldKind.NAME_PART:
+        core = arabic.spelling(text).replace(" ", "")
+        if len(core.removeprefix(_ARTICLE)) < 2:
+            return "NAME_TRUNCATED"  # «ال» alone: the rest of the name was not read
     if spec.kind in (FieldKind.DIGITS, FieldKind.CODE):
         text = text.replace(" ", "").upper()
     if spec.kind == FieldKind.DIGITS and not text.isdigit():

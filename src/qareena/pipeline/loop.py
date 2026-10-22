@@ -1,11 +1,12 @@
 """The evidence loop: the one agentic step (ADR-003).
 
 For each uncertain field, a written policy picks the next evidence action, within a budget.
-Both actions work on a crop around the field's printed label (found by the OCR reader,
-because labels are printed reliably):
+Both actions work on a crop around the field's printed label (found in the OCR reader's
+output by ``grounding.map_labels``, because labels are printed reliably):
 
-1. ``reocr``   — the OCR engine reads the crop, upscaled; a verbatim match adds an OCR source.
-                 Independent evidence, and cheap (CPU), so it goes first.
+1. ``reocr``   — the OCR engine reads the crop, upscaled; a verbatim match *at the field's
+                 label inside the crop* adds an OCR source (a crop can also hold the next
+                 row's value). Independent evidence, and cheap (CPU), so it goes first.
 2. ``reread``  — the VLM reads the crop for that value only. The *same* model agreeing with
                  itself is not independent evidence (errors repeat), so it only adds a REREAD
                  signal for the scorer; disagreement flags the field for review.
@@ -18,18 +19,16 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 import cv2
 import numpy as np
 
-from qareena.config import Catalog, FieldKind, FieldSpec
+from qareena.config import Catalog
 from qareena.eval.compare import canonical
-from qareena.pipeline.grounding import ground
+from qareena.pipeline.grounding import ground_field, map_labels
 from qareena.pipeline.records import DocumentRead, FieldRecord, Source
 from qareena.pipeline.scoring import INDEPENDENT
 from qareena.readers.ocr import OcrLine
-from qareena.text import arabic
 
 UPSCALE = 2.0
 
@@ -56,18 +55,6 @@ def needs_evidence(rec: FieldRecord) -> bool:
     return rec.critical and rec.value is not None and not rec.blocking and not independent_sources(rec)
 
 
-def label_box(spec: FieldSpec, lines: list[dict[str, Any]]) -> tuple[float, float, float, float] | None:
-    """Box of the OCR line carrying the field's printed label (Arabic label or an alias)."""
-    targets = [arabic.spelling(lab).replace(" ", "") for lab in (spec.label_ar, *spec.aliases)]
-    best, best_len = None, 0
-    for ln in lines:
-        text = arabic.spelling(ln["text"]).replace(" ", "")
-        for t in targets:
-            if t and t in text and len(t) > best_len:
-                best, best_len = tuple(ln["box"]), len(t)
-    return best
-
-
 def crop_near_label(img: np.ndarray, box: tuple[float, float, float, float]) -> np.ndarray:
     """Region around a label that contains its value, whether printed below it or beside it (RTL)."""
     h, w = img.shape[:2]
@@ -91,7 +78,7 @@ def run_loop(
         key = f"{doc.doc_type}.{name}"
         if not needs_evidence(rec):
             continue
-        box = label_box(spec, doc.ocr_lines)
+        box = rec.evidence.label_box
         if box is None:
             rec.add_reason("LABEL_NOT_FOUND")
             continue
@@ -103,16 +90,17 @@ def run_loop(
             t0 = time.perf_counter()
             big = cv2.resize(crop, None, fx=UPSCALE, fy=UPSCALE, interpolation=cv2.INTER_CUBIC)
             lines: list[OcrLine] = list(reocr(big))
-            g = ground(rec.raw, spec.kind if spec.kind != FieldKind.FULL_NAME else FieldKind.TEXT, lines)
+            g = ground_field(name, rec.raw, spec.kind, lines, map_labels(spec_doc, lines))
             if g.exact:
-                rec.add_source(Source.OCR)
-                if "NOT_GROUNDED" in rec.reasons:
+                rec.add_source(Source.OCR if g.anchored else Source.OCR_UNANCHORED)
+                if g.anchored and "NOT_GROUNDED" in rec.reasons:
                     rec.reasons.remove("NOT_GROUNDED")
             actions.append(
                 {
                     "field": key,
                     "action": "reocr",
                     "matched": g.exact,
+                    "anchored": g.anchored,
                     "seconds": round(time.perf_counter() - t0, 3),
                 }
             )

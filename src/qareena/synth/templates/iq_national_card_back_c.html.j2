@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+/* Held-out layout (Test-B only): header band, two inline columns, MRZ on a plain strip. */
+.band { position: absolute; left: 0; right: 0; top: 0; height: 84px; background: {{ style.ink }}; z-index: 1; }
+.head { color: #ffffff; }
+.head .t3 { color: #ffd9d2; }
+.cols { position: absolute; right: 30px; left: 30px; top: 100px; display: grid; grid-template-columns: 1fr 1fr;
+  column-gap: 30px; z-index: 2; }
+.row { display: flex; align-items: baseline; gap: 10px; height: 44px; }
+.row .lbl { flex: none; width: 128px; }
+.row .lbl::after { content: ":"; }
+.row .val { font-family: "PlexAr"; font-weight: 700; font-size: 22px; }
+.wide { grid-column: span 2; }
+.strip { position: absolute; left: 0; right: 0; bottom: 0; height: 132px; padding: 14px 28px; background: #ffffff;
+  border-top: 2px solid {{ style.ink }}; z-index: 2; }
+</style></head>
+<body><div class="card">
+  <div class="band"></div>
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head">
+    <div><div class="t1">البطاقة الموحدة (الخلف) — نموذج تجريبي</div><div class="t2">پشتەوە — نموونە</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <div class="cols">
+    <div class="row"><div class="lbl">مكان الولادة</div><div class="val" data-field="place_of_birth">{{ v.place_of_birth }}</div></div>
+    <div class="row"><div class="lbl">الولادة</div><div class="val num" data-field="date_of_birth">{{ v.date_of_birth | date_fmt("%Y/%m/%d", style) }}</div></div>
+    <div class="row"><div class="lbl">تاريخ الإصدار</div><div class="val num" data-field="issue_date">{{ v.issue_date | date_fmt("%Y/%m/%d", style) }}</div></div>
+    <div class="row"><div class="lbl">تاريخ الانتهاء</div><div class="val num" data-field="expiry_date">{{ v.expiry_date | date_fmt("%Y/%m/%d", style) }}</div></div>
+    <div class="row wide"><div class="lbl">الجهة المصدرة</div><div class="val" data-field="issuing_authority">{{ v.issuing_authority }}</div></div>
+    <div class="row wide"><div class="lbl">رقم السجل العائلي</div><div class="val" style="direction:ltr; font-family:Mono; font-size:20px" data-field="family_number">{{ v.family_number }}</div></div>
+  </div>
+  <div class="strip">
+    <div class="mrz" data-field="mrz_line_1">{{ v.mrz[0] }}</div>
+    <div class="mrz" data-field="mrz_line_2">{{ v.mrz[1] }}</div>
+    <div class="mrz" data-field="mrz_line_3">{{ v.mrz[2] }}</div>
+  </div>
+</div></body></html>

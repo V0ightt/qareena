@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from qareena.checks.mrz import check_digit, make_td1, parse_td1
+from qareena.checks.mrz import check_digit, make_td1, parse_td1, read_td1
 
 # ICAO Doc 9303 Part 5 specimen (fictional state UTO)
 ICAO_SPECIMEN = (
@@ -201,3 +201,34 @@ def test_class_repair_cannot_rescue_a_wrong_digit():
     rows[1] = rows[1][:2] + ("7" if rows[1][2] != "7" else "6") + rows[1][3:]  # a real digit misread
     m, _ = read_td1(rows, today=TODAY)
     assert not m.valid
+
+
+IRAQI_STYLE = make_td1(
+    document_number="OE9159457",
+    optional_1="995258598991",
+    birth_date=dt.date(1990, 3, 7),
+    sex="M",
+    expiry_date=dt.date(2034, 5, 1),
+    primary_name="ALOBAIDI",
+    secondary_names=["RAAD"],
+)
+
+
+def test_digit_in_an_unprotected_alphabetic_field_is_a_misread_and_repairable():
+    """Issuer, nationality and names carry no check digit; ICAO says they are letters."""
+    rows = [IRAQI_STYLE[0].replace("UTO", "UT0"), IRAQI_STYLE[1].replace("UTO", "UT0"), IRAQI_STYLE[2]]
+    strict = parse_td1(rows, today=TODAY)
+    assert all(strict.checks.values())  # every check digit passes...
+    assert not strict.valid  # ...yet a country code with a digit is no country code
+    assert "nationality is not alphabetic" in strict.errors
+    m, notes = read_td1(rows, today=TODAY)
+    assert m.valid
+    assert m.lines == IRAQI_STYLE
+    assert any("class fix" in n for n in notes)
+
+
+def test_digit_in_the_name_line_is_repaired():
+    rows = [*IRAQI_STYLE[:2], IRAQI_STYLE[2].replace("ALOBAIDI", "AL0BAIDI")]
+    m, _ = read_td1(rows, today=TODAY)
+    assert m.valid
+    assert m.primary_name == "ALOBAIDI"
