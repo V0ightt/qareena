@@ -277,6 +277,15 @@ class Runtime(BaseModel):
     def catalog_sha256(self) -> str:
         return content_hash(self.catalog)
 
+    @cached_property
+    def code_sha256(self) -> str:
+        """Hash of the code that turns readings into decisions (line endings normalised).
+
+        A certificate is bound to it: changing a rule, a prompt or the grounding after
+        certification voids the certificate, as DESIGN §9.1 freezes code before testing.
+        """
+        return decision_code_sha256()
+
     @property
     def fingerprint(self) -> dict[str, Any]:
         """Stamped on every trace and evaluation report so any result can be reproduced."""
@@ -284,11 +293,29 @@ class Runtime(BaseModel):
             "policy_version": self.policy.policy_version,
             "policy_sha256": self.policy_sha256,
             "catalog_sha256": self.catalog_sha256,
+            "code_sha256": self.code_sha256,
             "mode": self.settings.mode,
             "vlm_model": self.settings.vlm_model,
             "ocr_engine": self.settings.ocr_engine,
             "features": self.settings.features.model_dump(),
         }
+
+
+PACKAGE_DIR = Path(__file__).resolve().parent
+DECISION_CODE = ("pipeline", "checks", "readers", "text", "eval/compare.py")
+
+
+def decision_code_sha256(root: Path = PACKAGE_DIR) -> str:
+    h = hashlib.sha256()
+    files = sorted(
+        f
+        for part in DECISION_CODE
+        for f in ([root / part] if part.endswith(".py") else (root / part).rglob("*.py"))
+    )
+    for f in files:
+        h.update(f.relative_to(root).as_posix().encode("utf-8") + b"\0")
+        h.update(f.read_bytes().replace(b"\r\n", b"\n") + b"\0")
+    return h.hexdigest()
 
 
 def load_runtime(settings: Settings | None = None) -> Runtime:

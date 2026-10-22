@@ -172,6 +172,8 @@ def _eval(args: argparse.Namespace) -> int:
         print(f"scorer fitted on {len(train)} fields -> {args.weights}")
         return 0
     if args.action == "certify":
+        run_record = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+        fit.check_same_configuration(run_record["fingerprint"], runtime)
         weights = json.loads(args.weights.read_text(encoding="utf-8"))["weights"]
         cert = fit.certify(rows, weights, runtime)
         print(json.dumps({k: cert[k] for k in ("tau_critical", "tau_other")}, indent=1))

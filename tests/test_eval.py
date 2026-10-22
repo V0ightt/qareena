@@ -154,3 +154,11 @@ def test_unrotate_inverts_the_turn_the_pipeline_made(code, degrees):
     pts, size = metrics.unrotate(np.float32([[tx, ty]]), (turned.shape[1], turned.shape[0]), degrees)
     assert size == (100, 60)
     assert tuple(pts[0]) == (70, 10)
+
+
+def test_certification_refuses_traces_from_other_code(tmp_path):
+    runtime = load_runtime(Settings(_env_file=None, data_dir=tmp_path))
+    fit.check_same_configuration(runtime.fingerprint, runtime)  # same configuration: fine
+    other = runtime.fingerprint | {"code_sha256": "0" * 64}
+    with pytest.raises(ValueError, match="code_sha256"):
+        fit.check_same_configuration(other, runtime)

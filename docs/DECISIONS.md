@@ -66,6 +66,13 @@ The format follows lightweight Architecture Decision Records. New decisions are 
   - The grid starts at the strictest τ that still accepts ≥ 300 fields.
   - The bound is pooled across tiers, so per-tier error is reported, not certified.
   - We cannot certify 0.1%, and we say so.
+- **Binding (added while building, 22 Oct).** A certificate applies to one exact configuration:
+  - the policy hash and the VLM model;
+  - the scorer's feature list;
+  - a hash of the decision code (pipeline, checks, readers, normalisation; line endings normalised);
+  - the feature flags.
+
+  Change any of them and nothing can be pre-checked until certification is run again. Certification also refuses calibration traces whose recorded fingerprint differs from the current configuration, so code cannot change between the run and the certificate.
 
 ## ADR-006 · Fail fast: test the riskiest assumption on day 1
 - **Context.** The riskiest assumption is that a local model on an 8 GB laptop GPU reads Arabic ID fields well enough, with usable signals (valid JSON, logprobs, OCR agreement), at acceptable latency. Everything else depends on it.

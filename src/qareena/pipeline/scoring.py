@@ -93,7 +93,8 @@ PROVISIONAL = LogisticScorer(
 
 @dataclass(frozen=True)
 class Certificate:
-    """Thresholds certified on held-out calibration data for one policy + model combination."""
+    """Thresholds certified on held-out calibration data for one exact configuration: policy,
+    model, decision code and feature flags. Change any of them and it no longer applies."""
 
     policy_sha256: str
     vlm_model: str
@@ -101,6 +102,8 @@ class Certificate:
     tau_critical: float | None
     tau_other: float | None
     report: dict = field(default_factory=dict)
+    code_sha256: str = ""
+    feature_flags: dict = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> Certificate:
@@ -112,6 +115,8 @@ class Certificate:
             d.get("tau_critical"),
             d.get("tau_other"),
             d.get("report", {}) | {"features": d.get("features", list(FEATURES))},
+            d.get("code_sha256", ""),
+            d.get("feature_flags", {}),
         )
 
     def matches(self, runtime: Runtime) -> bool:
@@ -120,6 +125,8 @@ class Certificate:
             and self.vlm_model == runtime.settings.vlm_model
             and len(self.weights) == len(FEATURES)
             and self.report.get("features", list(FEATURES)) == list(FEATURES)
+            and self.code_sha256 == runtime.code_sha256
+            and self.feature_flags == runtime.settings.features.model_dump()
         )
 
 

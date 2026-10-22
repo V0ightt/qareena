@@ -57,6 +57,17 @@ def fit_logistic(rows: Sequence[FieldRow], l2: float = 1.0) -> tuple[float, ...]
     return tuple(round(float(v), 6) for v in res.x)
 
 
+def check_same_configuration(run_fingerprint: dict[str, Any], runtime: Runtime) -> None:
+    """Refuse to certify traces made by another policy, model, decision code or flag set."""
+    current = runtime.fingerprint
+    keys = ("policy_sha256", "catalog_sha256", "code_sha256", "vlm_model", "features")
+    differ = [k for k in keys if run_fingerprint.get(k) != current.get(k)]
+    if differ:
+        raise ValueError(
+            f"calibration traces come from another configuration ({', '.join(differ)}); run again"
+        )
+
+
 def certify(rows: Sequence[FieldRow], weights: Sequence[float], runtime: Runtime) -> dict[str, Any]:
     """Certify tau for critical and other fields on calibration rows; write the certificate."""
     pol = runtime.policy.thresholds
@@ -82,6 +93,8 @@ def certify(rows: Sequence[FieldRow], weights: Sequence[float], runtime: Runtime
     certificate = {
         "policy_sha256": runtime.policy_sha256,
         "vlm_model": runtime.settings.vlm_model,
+        "code_sha256": runtime.code_sha256,
+        "feature_flags": runtime.settings.features.model_dump(),
         "features": list(FEATURES),
         "weights": list(weights),
         "tau_critical": taus["critical"],
