@@ -306,3 +306,129 @@ def unsafe_prechecks(rows: list[FieldRow], packets: list[PacketRow]) -> list[str
         for p in packets
         if p.outcome == "PRE_CHECKED" and (p.packet in wrong or p.defects or p.expected != "PRE_CHECKED")
     ]
+
+
+# --- selective prediction: what each part buys (DESIGN §9.2, ablations A-D) --------------
+
+
+def risk_coverage(rows: Sequence[FieldRow], score: Any, eligible_only: bool = False) -> dict[str, Any]:
+    """Error among the k most confident fields, for every k. ``score(row)`` ranks them.
+
+    Coverage is over legible fields (a field the system must read). AURC is the area under the
+    risk-coverage curve: lower is better; an oracle that ranks every error last scores ~0.
+    """
+    pool = [r for r in rows if r.state in SCORED_STATES and r.predicted is not None]
+    legible = sum(1 for r in rows if r.state == "legible")
+    cand = [r for r in pool if r.eligible] if eligible_only else pool
+    ranked = sorted(cand, key=score, reverse=True)
+    errors = 0
+    curve = []
+    for k, r in enumerate(ranked, 1):
+        errors += not r.correct
+        curve.append((k / max(legible, 1), errors / k))
+    aurc = float(np.mean([risk for _, risk in curve])) if curve else None
+    at = {}
+    for target in (0.01, 0.02, 0.05):  # largest coverage whose cumulative error stays under target
+        ok = [cov for cov, risk in curve if risk <= target]
+        at[f"coverage_at_risk_{target}"] = round(max(ok), 4) if ok else 0.0
+    return {"n": len(cand), "aurc": round(aurc, 4) if aurc is not None else None, **at}
+
+
+def ablations(rows: Sequence[FieldRow], weights: Sequence[float]) -> dict[str, Any]:
+    """A: VLM alone, all accepted. B: VLM's own confidence. C: calibrated scorer. D: C + rules."""
+    legible = [r for r in rows if r.state == "legible"]
+    first = [r for r in rows if r.state in SCORED_STATES]
+    lp = lambda r: r.lp_min if r.lp_min is not None else -99.0  # noqa: E731
+    p = lambda r: p_of(r.x, weights)  # noqa: E731
+    return {
+        "A_vlm_all_accepted": {
+            "error_legible": rate(sum(not r.first_correct for r in legible), len(legible)),
+            "error_incl_unreadable": rate(sum(not r.first_correct for r in first), len(first)),
+        },
+        "B_vlm_logprob": risk_coverage(rows, lp),
+        "C_scorer": risk_coverage(rows, p),
+        "D_scorer_plus_rules": risk_coverage(rows, p, eligible_only=True),
+    }
+
+
+def markdown(summary: dict[str, Any], title: str) -> str:
+    """A one-page, human-readable report of ``summarize`` (plus ablations if present)."""
+
+    def r(x: dict[str, Any]) -> str:
+        if x.get("n", 0) == 0:
+            return "–"
+        lo, hi = x["ci95"]
+        return f"{x['k']}/{x['n']} ({100 * x['rate']:.1f}%, 95% CI {100 * lo:.1f}–{100 * hi:.1f})"
+
+    def b(x: dict[str, Any]) -> str:
+        return "–" if x["n"] == 0 else f"{x['errors']}/{x['n']} (95% upper bound {100 * x['upper95']:.2f}%)"
+
+    rd, acc, cal = summary["reading"], summary["accepted"], summary["calibration"]
+    lines = [
+        f"# {title}",
+        "",
+        f"Packets: {summary['packets']} · fields read: {summary['fields_read']} · "
+        f"states: {summary['states']}",
+        "",
+        "## Reading",
+        "",
+        "| | |",
+        "|---|---|",
+        f"| Exact, legible fields (final value) | {r(rd['exact_legible'])} |",
+        f"| Exact, VLM first pass alone | {r(rd['first_pass_exact_legible'])} |",
+        f"| False null (legible field left empty) | {r(rd['false_null'])} |",
+        f"| False fill (unreadable field given a value) | {r(rd['false_fill'])} |",
+        *[f"| Exact: {k} | {r(v)} |" for k, v in rd["by_kind"].items()],
+        *[f"| Exact: {k} | {r(v)} |" for k, v in rd["by_condition"].items()],
+        *[f"| Exact: layout {k} | {r(v)} |" for k, v in rd["by_layout"].items()],
+        "",
+        "## Accepted automatically",
+        "",
+        "| | |",
+        "|---|---|",
+        f"| Errors among accepted critical fields | {b(acc['critical'])} |",
+        f"| Errors among other accepted fields | {b(acc['other'])} |",
+        f"| Coverage (accepted ÷ legible) | {r(acc['coverage'])} |",
+        f"| Evidence box IoU ≥ 0.5 (accepted) | {r(summary['evidence_box_iou50'])} |",
+        f"| Calibration (adaptive ECE · Brier) | {cal.get('ece_adaptive')} · {cal.get('brier')} |",
+        "",
+        "## Packets",
+        "",
+        "| | |",
+        "|---|---|",
+        f"| Pre-checked | {summary['packets_outcome']['pre_checked']} |",
+        f"| Planted-defect escapes | {b(summary['packets_outcome']['planted_defect_escapes'])} |",
+        f"| Unsafe pre-checks | {len(summary.get('unsafe_prechecks', []))} |",
+        f"| Quality gate: retake recall | {r(summary['quality_gate']['retake_recall'])} |",
+        f"| Quality gate: false retakes | {r(summary['quality_gate']['false_retake'])} |",
+        f"| Latency p50 / p95 | {summary['latency_s'].get('p50')} s / {summary['latency_s'].get('p95')} s |",
+        "",
+        "Outcome confusion (expected → actual): "
+        + ", ".join(f"{k}: {v}" for k, v in summary["packets_outcome"]["confusion"].items()),
+    ]
+    if "ablations" in summary:
+        ab = summary["ablations"]
+        lines += [
+            "",
+            "## What each part buys (one run)",
+            "",
+            "| | AURC ↓ | Coverage at ≤1% error | at ≤2% | at ≤5% |",
+            "|---|---|---|---|---|",
+        ]
+        for key, name in (
+            ("B_vlm_logprob", "B · VLM's own confidence"),
+            ("C_scorer", "C · calibrated scorer"),
+            ("D_scorer_plus_rules", "D · scorer + two sources + rules (Qareena)"),
+        ):
+            x = ab[key]
+            lines.append(
+                f"| {name} | {x['aurc']} | {100 * x['coverage_at_risk_0.01']:.1f}% | "
+                f"{100 * x['coverage_at_risk_0.02']:.1f}% | {100 * x['coverage_at_risk_0.05']:.1f}% |"
+            )
+        first = r(ab["A_vlm_all_accepted"]["error_legible"])
+        lines.append(f"\nA · VLM alone, everything accepted: error on legible fields {first}.")
+        lines.append(
+            "\n_In-sample on the split the scorer was fitted on, so C and D are optimistic here; "
+            "certified numbers come from the calibration split._"
+        )
+    return "\n".join(lines) + "\n"

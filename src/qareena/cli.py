@@ -188,6 +188,10 @@ def _eval(args: argparse.Namespace) -> int:
         taus = (args.tau, args.tau)
     summary = metrics.summarize(rows, packets, weights=weights, taus=taus)
     summary["unsafe_prechecks"] = metrics.unsafe_prechecks(rows, packets)
+    summary["ablations"] = metrics.ablations(rows, weights)
+    (run_dir / "report.md").write_text(
+        metrics.markdown(summary, f"Qareena · {args.split} · {run_dir.name}"), encoding="utf-8", newline="\n"
+    )
     text = json.dumps(summary, indent=1, ensure_ascii=False)
     (run_dir / "metrics.json").write_text(text, encoding="utf-8", newline="\n")
     print(text)

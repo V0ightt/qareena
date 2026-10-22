@@ -119,3 +119,25 @@ def test_calibration_of_a_perfect_scorer_is_near_zero():
     cal = metrics._calibration(rows, w)
     assert cal["ece_adaptive"] < 0.02
     assert np.isfinite(cal["brier"])
+
+
+def test_risk_coverage_ranks_errors_last_for_a_good_score():
+    good = rows_with(90, 0, 0, 10)  # the 10 wrong ones have no OCR support
+    w = fit.fit_logistic(rows_with(300, 2, 50, 50))
+    rc = metrics.risk_coverage(good, lambda r: metrics.p_of(r.x, w))
+    assert rc["coverage_at_risk_0.01"] == pytest.approx(0.9)
+    worst = metrics.risk_coverage(good, lambda r: -metrics.p_of(r.x, w))  # errors ranked first
+    assert rc["aurc"] < worst["aurc"]
+
+
+def test_report_renders_every_section():
+    rows = rows_with(90, 1, 10, 5)
+    w = fit.fit_logistic(rows)
+    packets = [
+        PacketRow("P1", "clean", (), "PRE_CHECKED", "NEEDS_REVIEW", (), 20.0, {}, {}, {"tax_card": "scan"})
+    ]
+    s = metrics.summarize(rows, packets, weights=w, taus=(None, None))
+    s["ablations"] = metrics.ablations(rows, w)
+    text = metrics.markdown(s, "test")
+    for heading in ("## Reading", "## Accepted automatically", "## Packets", "## What each part buys"):
+        assert heading in text
