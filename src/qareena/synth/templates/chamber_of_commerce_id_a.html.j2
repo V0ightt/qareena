@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+.photo { position: absolute; left: 34px; top: 118px; width: 150px; height: 190px; border-radius: 10px;
+  background: {{ style.tint }}; border: 2px solid rgba(0,0,0,.12); z-index: 2; }
+.photo svg { width: 100%; height: 100%; }
+.rows { position: absolute; right: 34px; top: 112px; width: 610px; z-index: 2; }
+.row { display: flex; align-items: baseline; gap: 14px; margin-bottom: 9px; }
+.row .lbl { width: 122px; flex: none; }
+.row .val { font-size: 25px; }
+.foot { position: absolute; left: 34px; right: 34px; bottom: 22px; display: flex; justify-content: space-between;
+  z-index: 2; }
+.foot .val { font-size: 22px; }
+</style></head>
+<body><div class="card">
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head">
+    <div><div class="t1">هوية عضوية غرفة تجارية — نموذج تجريبي</div><div class="t2" data-field="chamber_governorate">{{ v.chamber_governorate }}</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <div class="photo"><svg viewBox="0 0 100 128"><circle cx="50" cy="44" r="22" fill="rgba(0,0,0,.18)"/><path d="M12 128c4-30 20-42 38-42s34 12 38 42z" fill="rgba(0,0,0,.18)"/></svg></div>
+  <div class="rows">
+    <div class="row"><div class="lbl">اسم العضو</div><div class="val" data-field="member_name">{{ v.member_name }}</div></div>
+    <div class="row"><div class="lbl">الاسم التجاري</div><div class="val" data-field="trade_name">{{ v.trade_name }}</div></div>
+    <div class="row"><div class="lbl">النشاط</div><div class="val" style="font-size:21px" data-field="activity">{{ v.activity }}</div></div>
+    <div class="row"><div class="lbl">رقم العضوية</div><div class="val num" data-field="membership_number">{{ v.membership_number | digits(style) }}</div></div>
+    <div class="row"><div class="lbl">الدرجة</div><div class="val" data-field="member_class">{{ v.member_class }}</div></div>
+  </div>
+  <div class="foot">
+    <div><div class="lbl">نافذة لغاية</div><div class="val num" data-field="valid_until">{{ v.valid_until | date_fmt("%d/%m/%Y", style) }}</div></div>
+    <div><div class="lbl">تاريخ الإصدار</div><div class="val num" data-field="issue_date">{{ v.issue_date | date_fmt("%d/%m/%Y", style) }}</div></div>
+  </div>
+</div></body></html>

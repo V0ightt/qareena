@@ -19,6 +19,9 @@ dependencies = [
     "onnxruntime>=1.20",
 ]
 
+[project.scripts]
+qareena = "qareena.cli:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",
@@ -49,7 +52,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]  # assert is how pytest works
+"tests/**" = ["S101", "S311"]  # assert is how pytest works; seeded test data
 "src/qareena/synth/**" = ["S311"]  # seeded pseudo-random synthetic data, not cryptography
 "tools/**" = ["S311", "E501"]  # report table templates
 

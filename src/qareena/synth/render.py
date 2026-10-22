@@ -135,8 +135,9 @@ class Renderer:
 
         self._pw = sync_playwright().start()
         self._browser = self._pw.chromium.launch(channel=self.channel)
+        # large enough for every template (cards and paper documents); the card element is cropped
         self._ctx = self._browser.new_context(
-            device_scale_factor=self.scale, viewport={"width": 960, "height": 640}
+            device_scale_factor=self.scale, viewport={"width": 1400, "height": 1000}
         )
         self._page = self._ctx.new_page()
         return self

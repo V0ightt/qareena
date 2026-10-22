@@ -152,7 +152,9 @@ def make_person(rng: random.Random, *, today: dt.date) -> Person:
     mother, _ = rng.choice(FEMALE)
     mother_father, _ = rng.choice(MALE)
     dob = _random_date(rng, dt.date(1960, 1, 1), dt.date(today.year - 19, 12, 31))
-    issue = _random_date(rng, dt.date(2016, 1, 1), today - dt.timedelta(days=30))
+    # cards exist since 2016 and last 10 years: issue late enough that the card is still valid
+    earliest = max(dt.date(2016, 1, 1), _add_years(today, -10) + dt.timedelta(days=60))
+    issue = _random_date(rng, earliest, today - dt.timedelta(days=30))
     expiry = _add_years(issue, 10)
     nid = "99" + "".join(rng.choice(string.digits) for _ in range(10))
     access = "".join(rng.choice(string.ascii_uppercase) for _ in range(2)) + "".join(
@@ -190,12 +192,14 @@ def make_person(rng: random.Random, *, today: dt.date) -> Person:
 
 
 def make_business(rng: random.Random, *, today: dt.date) -> Business:
-    c_issue = _random_date(rng, dt.date(today.year - 1, 1, 1), today - dt.timedelta(days=10))
+    # chamber membership is annual: issued this year, valid until 31 December
+    jan1 = dt.date(today.year, 1, 1)
+    c_issue = _random_date(rng, jan1, max(jan1, today - dt.timedelta(days=10)))
     t_issue = _random_date(rng, dt.date(today.year - 1, 1, 1), today - dt.timedelta(days=10))
     return Business(
         trade_name=f"{rng.choice(TRADE_WORDS)} {rng.choice(TRADE_KINDS)}",
         activity=rng.choice(ACTIVITIES),
-        chamber_governorate=f"غرفة تجارة {rng.choice(CITIES)}",
+        chamber_governorate=f"غرفة {rng.choice(CITIES)} النموذجية",  # fictional chamber name
         membership_number=str(rng.randint(1000, 99999)),
         member_class=rng.choice(CHAMBER_CLASSES),
         chamber_issue_date=c_issue,

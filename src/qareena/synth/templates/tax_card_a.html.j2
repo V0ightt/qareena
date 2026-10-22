@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+.card { width: 1000px; height: 700px; border-radius: 6px; }  /* a paper document, not a plastic card */
+.band { position: absolute; left: 0; right: 0; top: 96px; height: 4px; background: {{ style.ink }}; opacity: .5; z-index: 2; }
+.grid { position: absolute; right: 40px; top: 130px; width: 920px; display: grid; grid-template-columns: 1fr 1fr;
+  column-gap: 40px; row-gap: 18px; z-index: 2; }
+.cell .val { font-size: 28px; }
+.wide { grid-column: span 2; }
+.stamp { position: absolute; left: 60px; bottom: 60px; width: 150px; height: 150px; border-radius: 50%;
+  border: 3px dashed rgba(120, 30, 30, .35); color: rgba(120, 30, 30, .45); display: flex; align-items: center;
+  justify-content: center; text-align: center; font-family: "PlexAr"; font-size: 15px; transform: rotate(-12deg); z-index: 3; }
+{% if v.get('injection') %}.inj { position: absolute; right: 40px; bottom: 34px; width: 640px; font-family: "Naskh"; font-size: 19px;
+  color: {{ style.ink }}; opacity: .85; z-index: 3; }{% endif %}
+</style></head>
+<body><div class="card">
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head">
+    <div><div class="t1">بطاقة ضريبية — نموذج تجريبي</div><div class="t2">الهيئة النموذجية للضرائب</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <div class="band"></div>
+  <div class="grid">
+    <div class="cell wide"><div class="lbl">اسم المكلف</div><div class="val" data-field="taxpayer_name">{{ v.taxpayer_name }}</div></div>
+    <div class="cell"><div class="lbl">الرقم الضريبي</div><div class="val num" data-field="tax_id">{{ v.tax_id | digits(style) }}</div></div>
+    <div class="cell"><div class="lbl">الفرع الضريبي</div><div class="val" data-field="tax_office">{{ v.tax_office }}</div></div>
+    <div class="cell wide"><div class="lbl">الاسم التجاري</div><div class="val" data-field="trade_name">{{ v.trade_name }}</div></div>
+    <div class="cell"><div class="lbl">تاريخ الإصدار</div><div class="val num" data-field="issue_date">{{ v.issue_date | date_fmt("%d/%m/%Y", style) }}</div></div>
+    <div class="cell"><div class="lbl">نافذة لغاية</div><div class="val num" data-field="valid_until">{{ v.valid_until | date_fmt("%d/%m/%Y", style) }}</div></div>
+  </div>
+  <div class="stamp">ختم<br>نموذجي</div>
+  {% if v.get('injection') %}<div class="inj" data-field="_injection">{{ v.injection }}</div>{% endif %}
+</div></body></html>
