@@ -239,6 +239,7 @@ def build_split(
     spec: SplitSpec, out: Path, *, seed: int, today: dt.date, seen: set[str], renderer: Renderer
 ) -> dict[str, Any]:
     """Render, degrade and label one split under ``out/<split>``. Returns the split record."""
+    commit = _git_commit()  # at the start: the code that generates, not whatever HEAD is at the end
     root = out / spec.name
     root.mkdir(parents=True, exist_ok=True)
     rng = random.Random(seed * 7919 + spec.stream)
@@ -331,7 +332,7 @@ def build_split(
         "seed": seed,
         "today": today.isoformat(),
         "generator_version": GENERATOR_VERSION,
-        "generator_commit": _git_commit(),
+        "generator_commit": commit,
         "spec": dataclasses.asdict(spec),
         "scenario_weights": SCENARIO_WEIGHTS,
         "condition_weights": CONDITION_WEIGHTS,
