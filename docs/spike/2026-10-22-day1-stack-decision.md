@@ -134,3 +134,20 @@ A sentence on right-to-left reading order added 2–3 fields, which is noise, so
 | 1024 px | 208 |
 
 Cards keep 1600 px, the setting validated on day 1: 1280 px is equal within noise, and 1024 px loses detail. So size matters in opposite directions for the two document families. This is why it is set per document type.
+
+## First dev run (v1 dataset, 80 packets, provisional scorer)
+
+This was the first run of the full pipeline on the dev split. The split was built by the first generator, before the finger and glare fixes, so its "unreadable" labels are too strict, and false fills on them are not meaningful. That split is kept as `var/data_v1`.
+
+| | Result |
+|---|---|
+| Exact on legible fields (final value) | 1930/2257 (85.5%) |
+| Exact, VLM first pass alone (ablation A) | 1737/2257 (77.0%) |
+| False null | 23/2257 (1.0%) |
+| By kind | dates 474/474 · numbers 501/560 · text 567/692 · **names 388/531** |
+| Quality gate: retake recall / false retakes | 28/29 · 7/291 (fixed since: placement and finger simulation) |
+| Calibration of the provisional scorer (adaptive ECE, Brier) | 0.038 · 0.044 |
+| Latency per packet, p50 / p95 | 23.1 s / 29.6 s |
+| Unsafe pre-checks | 0 (nothing can be pre-checked without a certificate) |
+
+Name errors are mostly dropped letters in runs of similar glyphs (see FM-6 in `docs/FAILURE_MODES.md`). At the field's own label, the OCR reads names better than the VLM (84% vs 72%). Asking the VLM to verify the OCR's reading instead was tested and rejected (FM-6).

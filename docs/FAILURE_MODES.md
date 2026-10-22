@@ -69,4 +69,7 @@ Every entry here was seen in our own runs, not imagined. Each one lists the evid
 - **Now.**
   - These fields are not grounded, so they go to a person.
   - The workbench shows the OCR's reading next to the VLM's, with one-click "use this reading".
-- **Under study.** Whether the VLM can *verify* the OCR's candidate reliably (`tools/spike/verify_ab.py`). It is usable as evidence only if it almost never confirms a wrong candidate.
+- **Tested and rejected: letting the VLM verify the OCR's candidate** (`tools/spike/verify_ab.py`, 614 candidates where the readers disagreed).
+  - Asked whether the crop shows exactly that value, the 4B VLM said yes to 12 of 226 correct candidates and to 11 of 388 wrong ones.
+  - It rejects almost everything, and its rare yes is right only about half the time. That is no evidence at all.
+  - So the system still never replaces a value on its own. The OCR's reading stays a suggestion for the reviewer.
