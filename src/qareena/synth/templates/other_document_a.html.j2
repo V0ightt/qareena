@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<style>
+{% include "_base.css.j2" %}
+/* A document type Qareena does not support (odd-input suite): a fictional utility bill. */
+.card { width: 1000px; height: 700px; border-radius: 4px; }
+.rows { position: absolute; right: 50px; left: 50px; top: 150px; z-index: 2; }
+.row { display: flex; gap: 16px; margin-bottom: 14px; }
+.row .lbl { width: 180px; }
+.row .val { font-size: 24px; }
+</style></head>
+<body><div class="card">
+  <div class="watermark">SPECIMEN · نموذج تجريبي · غير صالح</div>
+  <div class="head" style="padding-top: 40px">
+    <div><div class="t1">قائمة استهلاك الكهرباء — نموذج تجريبي</div><div class="t2">شركة التوزيع النموذجية</div></div>
+    <div class="t3">SPECIMEN<br>NOT A VALID DOCUMENT</div>
+  </div>
+  <div class="rows">
+    <div class="row"><div class="lbl">اسم المشترك</div><div class="val">{{ v.name }}</div></div>
+    <div class="row"><div class="lbl">رقم الحساب</div><div class="val num">{{ v.account | digits(style) }}</div></div>
+    <div class="row"><div class="lbl">العنوان</div><div class="val">{{ v.address }}</div></div>
+    <div class="row"><div class="lbl">المبلغ المطلوب</div><div class="val num">{{ v.amount | digits(style) }} دينار</div></div>
+  </div>
+</div></body></html>
