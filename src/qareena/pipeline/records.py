@@ -94,5 +94,6 @@ class PacketResult(BaseModel):
     cross_checks: list[CrossCheck] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
     retake: dict[str, str] = Field(default_factory=dict)  # doc_type -> reason code
+    actions: list[dict[str, Any]] = Field(default_factory=list)  # evidence-loop log
     fingerprint: dict[str, Any] = Field(default_factory=dict)
     timings: dict[str, float] = Field(default_factory=dict)

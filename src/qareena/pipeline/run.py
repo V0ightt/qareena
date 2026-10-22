@@ -24,6 +24,7 @@ from qareena.config import Runtime
 from qareena.pipeline import router, rules
 from qareena.pipeline.grounding import ground
 from qareena.pipeline.logprobs import field_logprob
+from qareena.pipeline.loop import Budget, run_loop
 from qareena.pipeline.quality import assess
 from qareena.pipeline.records import DocumentRead, FieldRecord, PacketResult
 from qareena.pipeline.scoring import PROVISIONAL, LogisticScorer, assign_band, load_certificate
@@ -46,6 +47,8 @@ class VlmRead:
 
 class VlmReader(Protocol):
     def read(self, doc_type: str, png: bytes) -> VlmRead: ...
+
+    def read_field(self, doc_type: str, field: str, png: bytes) -> str | None: ...
 
 
 class OcrReader(Protocol):
@@ -71,6 +74,37 @@ class OllamaVlmReader:
         return VlmRead(
             r.data, r.content, r.logprobs, r.metrics, None if r.ok else f"INVALID_JSON: {r.parse_error}"
         )
+
+    def read_field(self, doc_type: str, field: str, png: bytes) -> str | None:
+        """Zoomed re-read of one field from a crop; None if unreadable or on any failure."""
+        doc = self._rt.catalog.documents[doc_type]
+        spec = doc.fields[field]
+        user = (
+            f"This image is a close-up crop of the field «{spec.label_ar}» "
+            f"on the document «{doc.label_ar}».\n"
+            "Transcribe only that field's value exactly as printed, "
+            "or null if you cannot read every character."
+        )
+        schema = {
+            "type": "object",
+            "properties": {"value": {"type": ["string", "null"]}},
+            "required": ["value"],
+            "additionalProperties": False,
+        }
+        try:
+            r = self._client.chat_json(
+                model=self._rt.settings.vlm_model,
+                system=SYSTEM,
+                user=user,
+                schema=schema,
+                images=[png],
+                logprobs=False,
+                num_predict=128,
+            )
+        except OllamaError:
+            return None
+        value = (r.data or {}).get("value")
+        return None if value is None else str(value)
 
 
 def encode_png(img: np.ndarray, long_side: int = 1600) -> bytes:
@@ -101,6 +135,7 @@ class Pipeline:
             LogisticScorer(self.cert.weights, certified=True) if self.cert else PROVISIONAL
         )
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ocr")
+        self._regions: dict[str, np.ndarray] = {}
 
     def close(self) -> None:
         self._pool.shutdown(wait=False)
@@ -124,6 +159,7 @@ class Pipeline:
         if not q.ok:
             doc.reasons.append(f"QUALITY_{q.reason}")  # retakes exhausted: read best-effort, flag it
         region = q.rectified if q.rectified is not None else img
+        self._regions[doc_type] = region
         doc.quality["read_size"] = [int(region.shape[1]), int(region.shape[0])]
         fut = self._pool.submit(self.ocr.read, region)
         vlm = self.vlm.read(doc_type, encode_png(region))
@@ -178,6 +214,7 @@ class Pipeline:
         kill_switch: bool = False,
     ) -> PacketResult:
         t0 = time.perf_counter()
+        self._regions = {}  # never reuse a previous packet's images
         retakes_used = retakes_used or {}
         limit = self.rt.policy.packet.retakes_per_document
         reads: dict[str, DocumentRead] = {}
@@ -193,6 +230,22 @@ class Pipeline:
         for k in (rules.CHAMBER, rules.TAX):
             rules.validity_rules(reads.get(k), self.today)
         checks = rules.cross_document({k: v for k, v in reads.items() if v.fields}, self.rt.policy)
+        actions: list[dict] = []
+        if self.rt.settings.features.evidence_loop:
+            loop_cfg = self.rt.policy.evidence_loop
+            budget = Budget(loop_cfg.max_actions_per_field, t0 + loop_cfg.packet_budget_seconds)
+            for doc_type, doc in reads.items():
+                region = self._regions.get(doc_type)
+                if region is None or not doc.fields:
+                    continue
+                actions += run_loop(
+                    doc,
+                    region,
+                    self.rt.catalog,
+                    budget=budget,
+                    reread=lambda d, f, crop: self.vlm.read_field(d, f, encode_png(crop, 800)),
+                    reocr=lambda big: self.ocr.read(big).lines,
+                )
         for doc in reads.values():
             spec_doc = self.rt.catalog.documents[doc.doc_type]
             for name, rec in doc.fields.items():
@@ -218,6 +271,7 @@ class Pipeline:
             reasons=reasons,
             retake=retake,
             fingerprint=self.rt.fingerprint,
+            actions=actions,
             timings={"total_s": round(time.perf_counter() - t0, 3)},
         )
 

@@ -18,6 +18,9 @@ from typing import Protocol
 from qareena.config import FieldKind, Runtime
 from qareena.pipeline.records import Band, FieldRecord, Source
 
+# Evidence that does not come from the VLM itself. A same-model re-read is a signal, not a source.
+INDEPENDENT = frozenset({Source.OCR, Source.MRZ, Source.CROSS_DOC})
+
 FEATURES = (
     "bias",
     "lp_min",
@@ -138,6 +141,6 @@ def assign_band(rec: FieldRecord, kind: FieldKind, scorer: Scorer, cert: Certifi
         and tau is not None
         and rec.p_correct >= tau
         and not caution
-        and (not rec.critical or len(rec.sources) >= 1)  # ADR-004: VLM + one independent source
+        and (not rec.critical or any(src in INDEPENDENT for src in rec.sources))  # ADR-004
     )
     rec.band = Band.ACCEPT if accept else Band.CHECK

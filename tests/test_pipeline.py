@@ -30,6 +30,10 @@ class FakeVlm:
         data = self.values[doc_type]
         return VlmRead(data, json.dumps(data, ensure_ascii=False), (), {"wall_s": 0.01})
 
+    def read_field(self, doc_type, field, png):
+        self.calls.append(f"{doc_type}.{field}")
+        return self.values[doc_type].get(field)
+
 
 class FakeOcr:
     """Pretends the OCR engine read every value exactly (grounded)."""
