@@ -23,6 +23,25 @@ These sources informed the design. **✔** means the specific claim was checked 
 - ○ Ollama logprobs (since v0.12.11): https://github.com/ollama/ollama/releases/tag/v0.12.11. The UTF-8 partial-token issue is #13497.
 - ○ Gemini models, pricing and free-tier data terms: https://ai.google.dev/gemini-api/docs/models · https://ai.google.dev/gemini-api/docs/pricing
 
+- ✔ **DocHallu**: *Perceptual Hallucination in Vision–Language Models* (Hwang et al., ACL Findings 2026, pp. 24710–24725).
+  - Key-information extraction with the answer region erased: models still answered at rates of 0.315–0.496. Qwen3-VL-4B: 0.459; GPT-5.2: 0.496.
+  - Numerical content is worse: 61.0% on the extraction task.
+  - LLM-based post-hoc filtering cut hallucination exposure by 36% on average (up to 88%). A different model as verifier ("cross-check") beat self-check.
+
+  https://aclanthology.org/2026.findings-acl.1237.pdf
+- ○ PP-OCRv6 (Jun 2026) supports 50 languages, and **Arabic script is not among them**, so we stay on PP-OCRv5 Arabic. https://arxiv.org/pdf/2606.13108
+- ○ Falcon-OCR-Arabic (TII, 6 Oct 2026, 270M): 81.87% text accuracy, 2nd behind Gemini 3.5 Flash. No downloadable checkpoint found yet; a watch-list item. https://huggingface.co/blog/tiiuae/falcon-ocr-arabic
+- ○ Nanonets IDP leaderboard (vendor; not Arabic, not IDs): Qwen3.5-9B 86.5, Qwen3.5-4B 86.0, Gemma-4-E4B 11.1 (probably format failures). https://benchmarking.nanonets.com/benchmarks/idp
+- ○ VAREX (arXiv 2603.15118): small models echo the schema instead of returning values, which argues for constrained decoding.
+
+## Synthetic data and labelling
+
+- ○ DocXPand-25k: MIT generator code, with SVG templates rendered in headless Chrome and field boxes as ground truth. https://github.com/QuickSign/docxpand
+- ○ MIDV-500 / MIDV-2020 capture protocols. Mock IDs printed on glossy paper, laminated, 1 photo per document per condition. Corner quads clicked by hand, and field boxes projected by homography. https://arxiv.org/pdf/2107.00396
+- ○ KIE-HVQA (legible / partly obscured / unrecognisable labels): https://arxiv.org/pdf/2506.20168
+- ○ "Beyond Accuracy" (arXiv 2609.15706): an extraction fine-tune overfit to a constant year in its synthetic data. Randomise every value.
+- ○ IDSPACE degradation parameter ranges: https://arxiv.org/abs/2609.03052
+
 ## Confidence, calibration, evaluation
 
 - ✔ **arXiv 2609.20110**, *Perception, Layout, and Validation: Calibrated Confidence for Reliable Straight-Through Processing of Financial Documents* (17 Sep 2026, preprint). Reports AUROC 0.54–0.74 for verbalised VLM signals vs 0.90–0.99 for the decomposed score.
@@ -36,8 +55,28 @@ These sources informed the design. **✔** means the specific claim was checked 
 
 ## Iraq, ZainCash, regulation
 
+- ✔ **ZainCash personal-wallet FAQ:**
+  - Requires the original national ID **and** the original housing card.
+  - NFC scanning: «بالامكان استخدام خاصية المسح (NFC) … او يمكنك تخطيها» ("you can use the NFC scan … or skip it").
+  - Signup review: «سيتم إرسال طلب التسجيل ليتم مراجعة البيانات خلال ساعات» ("the request will be sent for its data to be reviewed within hours").
+
+  https://zaincash.iq/ar/help/accounts-faq
+- ○ Merchant onboarding goes through the business-development team, and the published list **does not include a tax card**. https://zaincash.iq/ar/business-wallets
+- ○ Vendor coverage (Uqudo, Shufti, Sumsub) for Iraq: national ID and passport, and sometimes commercial registration or tax registration. No chamber ID or practice certificate. https://shuftipro.com/supported-countries/iraq/ · https://uqudo.com/iraq-kyc-aml-services/
+- ○ No public national ID-verification API yet (Jan 2026 statement): https://www.biometricupdate.com/202601/iraq-measures-dpi-progress-90-digital-id-uptake-859-egov-services
+- ○ No personal-data-protection law enacted as of 2026 (draft workshop Jan 2026).
+
 - ✔ **ZainCash merchant-wallet requirements**: Chamber of Commerce ID or a certificate of practising the profession; a commercial lease or title deed; the business owner's ID; the merchant's bank account; the merchant's residence ID. https://zaincash.iq/en/business/zaincash-accounts-wallets1
-- ○ Iraq National Card (TD1, 12-digit national number, 9-character access number, family number, Arabic + Kurdish): https://en.wikipedia.org/wiki/Iraq_National_Card · ICAO 9303 Part 5 (TD1 layout and check digits): https://www.icao.int/sites/default/files/publications/DocSeries/9303_p5_cons_en.pdf
+- ✔ **Iraq National Card** (Wikipedia; secondary source):
+  - 12-digit national number and a 9-character access number.
+  - Family number of 18 alphanumeric characters.
+  - Back-side dates printed as YYYY/MM/DD; MRZ dates as YYMMDD.
+  - Valid for 10 years.
+  - MRZ follows ICAO TD1. Line 1 holds ID, IRQ and the access number + check digit, then the 12-digit number. Line 2 holds DOB, sex, expiry, nationality and a composite check digit. Line 3 holds the Latin name.
+  - Text is Arabic + Kurdish, with English headings.
+
+  https://en.wikipedia.org/wiki/Iraq_National_Card
+- ○ ICAO 9303 Part 5 (TD1 layout and check digits): https://www.icao.int/sites/default/files/publications/DocSeries/9303_p5_cons_en.pdf
 - ○ CBI E-Payment Services Regulation No. 2 of 2024 (Official Gazette No. 4771): https://www.moj.gov.iq/upload/pdf/4771_461.pdf · AML/CFT Law 39/2015.
 - ○ Zain Sustainability Report 2025: 1.6M registered ZainCash wallets. https://zain.com/SR2025/wp-content/uploads/2026/04/15-Products-and-Services.pdf
 - ○ Landinfo (2015) on Iraqi identity documents and naming: https://landinfo.no/asset/3369/1/3369_1.pdf

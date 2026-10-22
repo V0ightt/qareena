@@ -9,21 +9,20 @@ The challenge rules require disclosing every model, tool, data source and AI cod
 | Claude Code (Anthropic; Claude Opus 5.5) | Research synthesis, design brief, technical design, code |
 | ChatGPT / OpenAI Codex (OpenAI) | Earlier planning and the two-slide proposal |
 
-## Models (planned; final choice after the week-1 bake-off)
+## Models (planned; confirmed or changed by the day-1 spike)
 
 | Model | Role | Where it runs | License |
 |---|---|---|---|
-| Qwen3.5-4B / 9B (Alibaba Qwen) | VLM reader (candidate) | Local, via Ollama | Apache-2.0 |
-| Qwen3-VL-8B-Instruct | VLM control baseline | Local, via Ollama | Apache-2.0 |
-| PP-OCRv5 Arabic (PaddleOCR) | OCR second reader and evidence boxes | Local | Apache-2.0 |
-| Surya 2 (Datalab) | Alternative OCR reader (comparison only) | Local | Code Apache-2.0; weights OpenRAIL-M |
-| Tesseract `ara` | Classic baseline / CPU fallback | Local | Apache-2.0 |
+| Qwen3.5-4B (Alibaba Qwen), `qwen3.5:4b` | VLM reader | Local, Ollama, GPU | Apache-2.0 |
+| Qwen3-VL-4B-Instruct, `qwen3-vl:4b` | VLM control baseline | Local, Ollama, GPU | Apache-2.0 |
+| PP-OCRv5 detector + `arabic_PP-OCRv5_rec_mobile` (PaddleOCR models, run via RapidOCR / ONNX Runtime) | OCR reader and evidence boxes | Local, CPU | Apache-2.0 |
+| Tesseract 5.5 `ara` (tessdata_best) | OCR fallback and MRZ reading | Local, CPU | Apache-2.0 |
 | Gemini 3.5 Flash-Lite / 3.8 Flash (Google) | Cloud reference in the offline benchmark only, on synthetic data | Google AI Studio free tier | Google terms; free-tier data may be used by Google |
-| An LLM, provider to be recorded per run | Generating fictional profiles | Groq, Gemini or local | — |
+| An LLM, provider recorded per run | Generating fictional profiles | Groq, Gemini or local | — |
 
 ## Libraries and tools (planned)
 
-Python 3.12, FastAPI, Jinja2, HTMX, Tailwind CSS, Pydantic, OpenCV, Pillow + pillow-heif, CAMeL Tools, rapidfuzz, scikit-learn, SciPy, Playwright, Augraphy, albumentations, Faker, SQLite, cryptography, pytest, ruff, uv, GitHub Actions, gitleaks, Ollama.
+Python 3.12, FastAPI, Jinja2, HTMX, Tailwind CSS, Pydantic, OpenCV, Pillow + pillow-heif, pypdfium2, RapidOCR, ONNX Runtime, python-bidi, CAMeL Tools, rapidfuzz, scikit-learn, SciPy, Playwright, Augraphy, albumentations, Faker, SQLite, cryptography, pytest, hypothesis, ruff, uv, GitHub Actions, gitleaks, Ollama.
 
 Design brief: hand-written HTML/CSS rendered to PDF with Microsoft Edge (headless). Fonts are IBM Plex Sans, IBM Plex Sans Arabic and IBM Plex Mono, all under the SIL Open Font License.
 
