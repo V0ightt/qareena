@@ -220,6 +220,16 @@ def _serve(args: argparse.Namespace) -> int:
     app = create_app(
         runtime, make_pipeline, reviewer_password=password.get_secret_value() if password else None
     )
+    if args.warm:  # load both readers now, so the first case does not wait for model loading
+        import numpy as np
+
+        from qareena.pipeline.run import encode_png
+
+        pipe = app.state.q.pipeline()
+        blank = np.full((540, 856, 3), 255, np.uint8)
+        pipe.ocr.read(blank)
+        warm = pipe.vlm.read("tax_card", encode_png(blank))
+        print(f"readers warm (VLM {warm.metrics.get('wall_s', 0):.1f} s)", flush=True)
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     return 0
 
@@ -289,6 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     sv = sub.add_parser("serve", help="the web app: capture page, reviewer workbench, system page")
     sv.add_argument("--host", default="127.0.0.1", help="listen address (default: this machine only)")
     sv.add_argument("--port", type=int, default=8000)
+    sv.add_argument("--warm", action="store_true", help="load the models before accepting requests")
     sv.set_defaults(func=_serve)
     st = sub.add_parser("status", help="configuration fingerprint, certification and model server health")
     st.set_defaults(func=_status)
