@@ -4,6 +4,7 @@ import json
 import sys
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pytest
 
@@ -20,14 +21,20 @@ from test_rules import TODAY, base_values
 
 
 class FakeVlm:
-    def __init__(self, values, fail=(), crop=None):
+    def __init__(self, values, fail=(), crop=None, loops=None):
         self.values, self.fail, self.calls = values, set(fail), []
         self.crop = crop or {}  # (doc_type, field) -> answer to a crop re-read
+        self.loops = dict(loops or {})  # doc_type -> how many full reads loop before one works
+        self.sizes = []
 
     def read(self, doc_type, png):
         self.calls.append(doc_type)
+        self.sizes.append(max(cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR).shape[:2]))
         if doc_type in self.fail:
             return VlmRead(None, "", (), {}, "READER_FAILED: connection refused")
+        if self.loops.get(doc_type, 0) > 0:
+            self.loops[doc_type] -= 1
+            return VlmRead(None, "", (), {}, "READER_LOOPED: token repeat limit reached")
         data = self.values[doc_type]
         return VlmRead(data, json.dumps(data, ensure_ascii=False), (), {"wall_s": 0.01})
 
@@ -110,10 +117,10 @@ def certify(runtime, tau=0.5):
     )
 
 
-def run(runtime, values=None, *, printed=None, crop=None, labels=True, **kw):
+def run(runtime, values=None, *, printed=None, crop=None, labels=True, loops=None, **kw):
     """``values``: what the VLM reads; ``printed``: what is on the card (the OCR reads it exactly)."""
     values = values or base_values()
-    vlm = FakeVlm(values, kw.pop("fail", ()), crop)
+    vlm = FakeVlm(values, kw.pop("fail", ()), crop, loops)
     ocr = FakeOcr(printed or values, runtime.catalog, labels=labels)
     p = Pipeline(runtime, vlm, ocr, today=TODAY)
     try:
@@ -276,3 +283,57 @@ def test_on_a_layout_without_known_labels_ocr_alone_cannot_accept_a_critical_fie
     tax_id = result.documents["tax_card"].fields["tax_id"]  # critical, and no MRZ or other document has it
     assert tax_id.band != Band.ACCEPT
     assert result.outcome == Outcome.NEEDS_REVIEW
+
+
+def _backwards(text):
+    return " ".join(w[::-1] for w in text.split())
+
+
+def test_arabic_read_backwards_gets_a_crop_reread(runtime):
+    certify(runtime)
+    read = base_values()
+    right = read["tax_card"]["taxpayer_name"]
+    read["tax_card"]["taxpayer_name"] = _backwards(right)
+    result, _ = run(runtime, values=read, printed=base_values(), crop={("tax_card", "taxpayer_name"): right})
+    rec = result.documents["tax_card"].fields["taxpayer_name"]
+    assert rec.value == right
+    assert rec.evidence.first_raw == _backwards(right)
+    assert "READ_REVERSED" not in rec.reasons
+    assert result.outcome == Outcome.PRE_CHECKED, result.reasons
+
+
+def test_arabic_still_backwards_after_the_reread_is_blocked(runtime):
+    certify(runtime)
+    read = base_values()
+    read["tax_card"]["taxpayer_name"] = _backwards(read["tax_card"]["taxpayer_name"])
+    result, _ = run(runtime, values=read, printed=base_values(), crop={("tax_card", "taxpayer_name"): None})
+    rec = result.documents["tax_card"].fields["taxpayer_name"]
+    assert "READ_REVERSED" in rec.reasons
+    assert rec.band == Band.REVIEW
+    assert result.outcome == Outcome.NEEDS_REVIEW
+
+
+def test_a_looping_answer_is_retried_at_another_size_and_the_system_is_not_degraded(runtime):
+    certify(runtime)
+    result, vlm = run(runtime, loops={"tax_card": 1})
+    assert "SYSTEM_DEGRADED" not in result.reasons
+    assert any(r.startswith("NOTE_RETRIED_RESIZED") for r in result.documents["tax_card"].reasons)
+    tax_reads = [s for d, s in zip(vlm.calls, vlm.sizes, strict=False) if d == "tax_card"]
+    assert tax_reads[-1] != tax_reads[0]  # the retry used another size
+    assert result.outcome == Outcome.PRE_CHECKED, result.reasons
+
+
+def test_a_document_the_model_cannot_read_twice_goes_to_review_not_degraded(runtime):
+    certify(runtime)
+    result, _ = run(runtime, loops={"tax_card": 2})
+    assert "READ_FAILED" in result.reasons
+    assert "SYSTEM_DEGRADED" not in result.reasons
+    assert result.outcome == Outcome.NEEDS_REVIEW
+
+
+def test_read_size_comes_from_the_certified_policy(runtime):
+    _, vlm = run(runtime)
+    sizes = dict(zip(vlm.calls, vlm.sizes, strict=False))
+    reader = runtime.policy.reader
+    for doc_type, size in sizes.items():
+        assert size <= reader.long_side_for(doc_type)

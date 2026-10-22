@@ -97,6 +97,48 @@ def _print_summary(result, problems: dict[str, str]) -> None:
         print(f"  cross-check {c.rule}: {c.result} {c.reasons}")
 
 
+def _build_dataset(args: argparse.Namespace) -> int:
+    import dataclasses
+
+    from qareena.synth.dataset import SPLITS, build_split, unique_packets
+    from qareena.synth.render import Renderer
+
+    today = dt.date.fromisoformat(args.today)
+    seen: set[str] = set()
+    for name, spec in SPLITS.items():  # people of earlier splits are drawn first, never reused
+        if name == args.split:
+            break
+        for _ in unique_packets(spec, args.seed, today, seen):
+            pass
+    spec = SPLITS[args.split]
+    if args.packets:
+        spec = dataclasses.replace(spec, packets=args.packets)
+    with Renderer() as r:
+        record = build_split(spec, args.out, seed=args.seed, today=today, seen=seen, renderer=r)
+    print(json.dumps(record, indent=1))
+    return 0
+
+
+def _seal(args: argparse.Namespace) -> int:
+    from qareena.synth.dataset import seal, verify
+
+    split_dir = args.data / args.split
+    problems = verify(split_dir)
+    if problems:
+        print("\n".join(problems[:20]))
+        return 1
+    print(f"sealed: {seal(split_dir)}")
+    return 0
+
+
+def _verify(args: argparse.Namespace) -> int:
+    from qareena.synth.dataset import verify
+
+    problems = verify(args.data / args.split)
+    print("\n".join(problems[:50]) if problems else f"{args.split}: every file matches its manifest")
+    return 1 if problems else 0
+
+
 def _status(args: argparse.Namespace) -> int:
     from qareena.pipeline.scoring import certificate_path, load_certificate
     from qareena.readers.ollama import OllamaClient, OllamaError
@@ -134,6 +176,22 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--out", type=Path)
     r.add_argument("--today")
     r.set_defaults(func=_run)
+    splits = ("dev", "calib", "test_a", "test_b")
+    b = sub.add_parser("build-dataset", help="render, degrade and label one evaluation split")
+    b.add_argument("--split", required=True, choices=splits)
+    b.add_argument("--packets", type=int, help="override the split size (smoke tests)")
+    b.add_argument("--seed", type=int, default=20261022)
+    b.add_argument("--today", default="2026-10-22", help="ISO date the packets are valid on")
+    b.add_argument("--out", type=Path, default=Path("var/data"))
+    b.set_defaults(func=_build_dataset)
+    se = sub.add_parser("seal", help="verify a built split and write its seal to docs/data/seals")
+    se.add_argument("--split", required=True, choices=splits)
+    se.add_argument("--data", type=Path, default=Path("var/data"))
+    se.set_defaults(func=_seal)
+    ve = sub.add_parser("verify", help="re-hash a built split against its manifest")
+    ve.add_argument("--split", required=True, choices=splits)
+    ve.add_argument("--data", type=Path, default=Path("var/data"))
+    ve.set_defaults(func=_verify)
     st = sub.add_parser("status", help="configuration fingerprint, certification and model server health")
     st.set_defaults(func=_status)
     args = ap.parse_args(argv)

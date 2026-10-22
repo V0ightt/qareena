@@ -23,18 +23,19 @@ from qareena.checks.fields import garbled, label_echo
 from qareena.checks.injection import suspicious_lines
 from qareena.config import Runtime
 from qareena.pipeline import router, rules
-from qareena.pipeline.grounding import LabelMap, ground_field, map_labels
+from qareena.pipeline.grounding import LabelMap, ground_field, map_labels, reads_reversed
 from qareena.pipeline.logprobs import field_logprob
 from qareena.pipeline.loop import Budget, crop_near_label, run_loop
 from qareena.pipeline.quality import assess
 from qareena.pipeline.records import DocumentRead, FieldRecord, PacketResult
 from qareena.pipeline.scoring import PROVISIONAL, LogisticScorer, assign_band, load_certificate
-from qareena.readers.ocr import OcrResult
+from qareena.readers.ocr import OcrLine, OcrResult
 from qareena.readers.ollama import OllamaClient, OllamaError, TokenLogprob
 from qareena.readers.prompts import SYSTEM, VALUE_SCHEMA, crop_prompt, field_schema, json_keys, user_prompt
 
 log = logging.getLogger(__name__)
 WRONG_DOC_NULL_SHARE = 0.7  # this share of required fields empty on a good photo -> wrong document
+RETRY_ON = ("READER_LOOPED", "INVALID_JSON")  # model failures on this image: one retry at another size
 RECOVER_MAX = 4  # crop re-reads per document for required fields answered with a label or glyph soup
 
 
@@ -74,7 +75,10 @@ class OllamaVlmReader:
                 images=[png],
             )
         except OllamaError as exc:
-            return VlmRead(None, "", (), {}, f"READER_FAILED: {exc}")
+            # A generation stopped for repeating itself is the model failing on this image,
+            # not the server failing: it is retried smaller, and never marks the system degraded.
+            code = "READER_LOOPED" if "repeat limit" in str(exc) else "READER_FAILED"
+            return VlmRead(None, "", (), {}, f"{code}: {exc}")
         data = None if r.data is None else {name: r.data.get(key) for key, name in keys.items()}
         return VlmRead(
             data,
@@ -159,7 +163,15 @@ class Pipeline:
         self._regions[doc_type] = region
         doc.quality["read_size"] = [int(region.shape[1]), int(region.shape[0])]
         fut = self._pool.submit(self.ocr.read, region)
-        vlm = self.vlm.read(doc_type, encode_png(region))
+        reader = self.rt.policy.reader
+        vlm = self.vlm.read(doc_type, encode_png(region, reader.long_side_for(doc_type)))
+        if vlm.error and vlm.error.startswith(RETRY_ON):
+            doc.reasons.append(f"NOTE_RETRIED_RESIZED:{vlm.error.split(':', 1)[0]}")
+            retry = self.vlm.read(doc_type, encode_png(region, reader.retry_for(doc_type)))
+            if retry.error is None or retry.error.startswith("READER_FAILED"):
+                vlm = retry  # read, or the server itself failed (that one does degrade the system)
+            else:
+                vlm = VlmRead(None, "", (), retry.metrics, f"READ_FAILED: {retry.error}")
         ocr = fut.result()
         doc.timings.update(
             {
@@ -179,7 +191,7 @@ class Pipeline:
             doc.reasons.append(vlm.error.split(":", 1)[0])
         data = {k: None if v is None else str(v) for k, v in (vlm.data or {}).items()}
         labels = map_labels(spec_doc, ocr.lines)
-        recovered = self._recover(doc, data, region, labels)
+        recovered, backwards = self._recover(doc, data, region, ocr.lines, labels)
         for name, spec in spec_doc.fields.items():
             raw = data.get(name)
             rec = rules.make_record(doc_type, name, raw, self.rt.catalog)
@@ -188,6 +200,8 @@ class Pipeline:
             if name in recovered:
                 ev.first_raw = recovered[name]
                 rec.add_reason("NOTE_RECOVERED_FROM_CROP")
+            if name in backwards:
+                rec.add_reason("READ_REVERSED", blocking=True)  # Arabic read left to right
             if raw:
                 g = ground_field(name, raw, spec.kind, ocr.lines, labels)
                 ev.ocr_matches, ev.ocr_similarity = g.matches, round(g.similarity, 4)
@@ -208,35 +222,57 @@ class Pipeline:
         return doc
 
     def _recover(
-        self, doc: DocumentRead, data: dict[str, str | None], region: np.ndarray, labels: LabelMap
-    ) -> dict[str, str]:
-        """Re-read, from a crop at the label, required fields answered with a label or glyph soup.
+        self,
+        doc: DocumentRead,
+        data: dict[str, str | None],
+        region: np.ndarray,
+        lines: tuple[OcrLine, ...],
+        labels: LabelMap,
+    ) -> tuple[dict[str, str], set[str]]:
+        """Re-read, from a crop at its label, a field whose first answer is unusable.
 
-        On some layouts the full-page read returns a field's Kurdish label as its value. That
-        answer is never kept: the field is read again from a close-up crop around its printed
-        label. The new value goes through every rule like any other reading (it has no logprobs,
-        so it scores lower). Returns field -> the rejected first answer, for the trace.
+        Unusable means a printed label (some layouts get their Kurdish label returned as the
+        value), spelled-out glyphs, or Arabic read backwards (the OCR at the label matches the
+        answer reversed). That answer is never kept: the field is read once more from a close-up
+        crop around its printed label, and the new value goes through every rule like any other
+        reading (it has no logprobs, so it scores lower). At most ``RECOVER_MAX`` per document.
+
+        Returns (field -> the rejected first answer, fields still read backwards).
         """
         t0 = time.perf_counter()
         printed = self.rt.catalog.printed_labels()
         spec_doc = self.rt.catalog.documents[doc.doc_type]
         out: dict[str, str] = {}
+        backwards: set[str] = set()
+
+        def unusable(name: str, value: str) -> str | None:
+            if label_echo(value, printed) is not None or garbled(value):
+                return "label"
+            if reads_reversed(name, value, spec_doc.fields[name].kind, lines, labels):
+                return "reversed"
+            return None
+
         for name, spec in spec_doc.fields.items():
             raw = data.get(name)
-            if len(out) >= RECOVER_MAX or not spec.required or raw is None or name not in labels.label_box:
+            if raw is None or (problem := unusable(name, raw)) is None:
                 continue
-            if label_echo(raw, printed) is None and not garbled(raw):
+            if problem == "reversed":
+                backwards.add(name)
+            elif not (spec.required or spec.critical):
+                continue  # an optional field may simply stay unread
+            if len(out) >= RECOVER_MAX or name not in labels.label_box:
                 continue
             crop = crop_near_label(region, labels.label_box[name])
             if crop.size == 0:
                 continue
             second = self.vlm.read_field(doc.doc_type, name, encode_png(crop, 800))
-            if second is None or label_echo(second, printed) is not None or garbled(second):
+            if second is None or unusable(name, second) is not None:
                 continue
             out[name], data[name] = raw, second
+            backwards.discard(name)
         if out:
             doc.timings["recover_s"] = round(time.perf_counter() - t0, 3)
-        return out
+        return out, backwards
 
     # --- the packet ---------------------------------------------------------------------
 
@@ -285,9 +321,7 @@ class Pipeline:
             spec_doc = self.rt.catalog.documents[doc.doc_type]
             for name, rec in doc.fields.items():
                 assign_band(rec, spec_doc.fields[name].kind, self.scorer, self.cert)
-        degraded = any(
-            r.startswith(("READER_FAILED", "INVALID_JSON")) for d in reads.values() for r in d.reasons
-        )
+        degraded = any(r.startswith("READER_FAILED") for d in reads.values() for r in d.reasons)
         outcome, reasons, retake = router.route(
             self.rt.policy.packet.required_documents,
             reads,

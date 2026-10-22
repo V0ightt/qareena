@@ -119,3 +119,15 @@ def test_a_shorter_ocr_line_cannot_ground_a_longer_value():
         "taxpayer_name", "سجاد رعد كاظم الحسيني", FieldKind.FULL_NAME, lines, map_labels(TAX, lines)
     )
     assert g.matches == 0  # half a name is not the name
+
+
+def test_arabic_read_backwards_is_recognised_at_its_label():
+    """Seen on the business documents: «داجس عر مظا يدييزلا» for «سجاد رعد كاظم الزبيدي»."""
+    from qareena.pipeline.grounding import reads_reversed
+
+    lines = [ln("اسم المكلف", 1700, 100, 1880, 140), ln("سجاد رعد كاظم الزبيدي", 1100, 95, 1650, 150)]
+    lm = map_labels(TAX, lines)
+    assert reads_reversed("taxpayer_name", "داجس دعر مظاك يديبزلا", FieldKind.FULL_NAME, lines, lm)
+    assert reads_reversed("taxpayer_name", "يديبزلا مظاك دعر داجس", FieldKind.FULL_NAME, lines, lm)
+    assert not reads_reversed("taxpayer_name", "سجاد رعد كاظم الزبيدي", FieldKind.FULL_NAME, lines, lm)
+    assert not reads_reversed("taxpayer_name", "علي حسين", FieldKind.FULL_NAME, lines, lm)  # just wrong

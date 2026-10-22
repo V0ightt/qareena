@@ -32,5 +32,15 @@ evidence_loop:
   max_actions_per_field: 2
   packet_budget_seconds: 90
 
+reader:
+  # tools/spike/business_ab.py, clean renders of layouts A-C (exact fields of 252 for the
+  # business documents): 1600 px 151, 1280 px 202, 1024 px 212. Every right-to-left reversal,
+  # column swap and repetition loop happened at 1600 px.
+  long_side_px: 1600           # ID cards (size study for cards: see the decision memo)
+  long_side_px_by_document:
+    chamber_of_commerce_id: 1280   # 122/144 (1024 px: 116)
+    tax_card: 1024                 # 96/108 (1280 px: 80, 1600 px: 42)
+  retry_long_side_px: [1024, 1280] # after a looping or broken answer: the first size that differs
+
 retention:
   image_hours: 24              # demo setting; production follows ZainCash / CBI record rules

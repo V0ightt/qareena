@@ -29,6 +29,7 @@ class QualityThresholds:
     max_glare_frac: float = 0.02  # share of the document that is blown-out highlight
     min_brightness: float = 55.0  # mean grey level 0..255
     max_brightness: float = 240.0
+    min_ink_contrast: float = 170.0  # TOO_BRIGHT only if even the darkest 1% (the ink) is paler than this
     min_long_side_px: int = 600  # below this, small print is not legible
 
 
@@ -85,11 +86,13 @@ def assess(img: np.ndarray, t: QualityThresholds | None = None) -> QualityReport
     )
     metrics["sharpness"] = float(cv2.Laplacian(scaled, cv2.CV_64F).var())
     metrics["brightness"] = float(scaled.mean())
+    metrics["ink_p1"] = float(np.percentile(scaled, 1))  # how dark the darkest print still is
     metrics["glare_frac"] = glare_fraction(region)
     rect = region if quad is not None else None
     for reason, failed in (
         ("TOO_DARK", metrics["brightness"] < t.min_brightness),
-        ("TOO_BRIGHT", metrics["brightness"] > t.max_brightness),
+        # A well-lit white document is bright; it is overexposed only when the ink washes out.
+        ("TOO_BRIGHT", metrics["brightness"] > t.max_brightness and metrics["ink_p1"] > t.min_ink_contrast),
         ("BLUR", metrics["sharpness"] < t.min_sharpness),
         ("GLARE", metrics["glare_frac"] > t.max_glare_frac),
     ):

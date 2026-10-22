@@ -7,7 +7,7 @@
 @font-face { font-family: "Mono"; src: url("{{ font("IBMPlexMono-Medium.ttf") }}"); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { background: #ffffff; }
+html, body { background: transparent; }  /* screenshots keep the card's own shape (alpha) */
 body { padding: 24px; }
 .card {
   position: relative; overflow: hidden; direction: rtl;

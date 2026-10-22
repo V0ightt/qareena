@@ -101,3 +101,26 @@ Fixes:
 - A clipped blob that encloses dark ink is print, not glare. Glare measurements on real hotspots are unchanged.
 
 Result: **0/124 false retakes** on clean renders of all layouts.
+
+## Input size, and right-to-left reversal on the business documents
+
+The first end-to-end packets showed a failure the ID-card spikes never had. On the layout-A tax card the VLM returned Arabic **character-reversed** («داجس عر مظا يدييزلا» for «سجاد رعد كاظم الزبيدي») and swapped the left and right columns (issue date ↔ valid until). It read the page left to right. The safety net caught it: nothing grounded, and the dates were flagged `VALUE_AT_OTHER_LABEL`. But the whole document was lost.
+
+`tools/spike/business_ab.py`: 6 packets × layouts A–C × chamber ID and tax card = 36 clean images, 252 fields, each read at three input sizes with two prompts.
+
+| Long side sent to the model | Exact | Docs with a reversed field | Swapped dates | Repetition loops |
+|---|---|---|---|---|
+| 1600 px (the day-1 setting) | 151 (60%) | 4 | 3 | 1 |
+| 1280 px | 202 (80%) | 0 | 0 | 0 |
+| 1024 px | 212 (84%) | 0 | 0 | 0 |
+
+Per document, the best sizes are:
+- Chamber ID: 1280 px (122/144; 116 at 1024 px).
+- Tax card: 1024 px (96/108; 42 at 1600 px).
+
+A sentence on right-to-left reading order added 2–3 fields, which is noise, so it was not adopted.
+
+**Decisions** (now in `config/policy.yaml` → `reader`, because size changes what the model reads and so must be certified):
+- Business documents read at 1280 px (chamber) and 1024 px (tax card).
+- A repetition loop or broken JSON is retried once at the other size. It is a model failure on that image, so it never marks the system degraded. If the retry also fails, the document is `READ_FAILED` and goes to review.
+- A reading that the OCR at the field's own label matches **backwards** is `READ_REVERSED`. It gets the crop re-read. If it is still reversed, it is blocked.

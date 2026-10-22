@@ -334,3 +334,26 @@ def ground_field(
         anywhere.line_index in labels.owner or anywhere.line_index in labels.label_lines
     )
     return Grounding(0, g.similarity, None, None, None, False, anchored, foreign)
+
+
+REVERSED_MATCH = 0.8  # a backwards reading also drops letters («عر» for «رعد»), so match more loosely
+_TEXT_KINDS = (FieldKind.NAME_PART, FieldKind.FULL_NAME, FieldKind.TEXT, FieldKind.ENUM)
+
+
+def reads_reversed(
+    name: str, value: str | None, kind: FieldKind, lines: Sequence[OcrLine], labels: LabelMap
+) -> bool:
+    """The OCR at this field's own label matches the value read *backwards*, not forwards.
+
+    VLMs sometimes read Arabic left to right: «داجس» for «سجاد», word order kept or not. Only
+    an anchored match counts, so a reversed reading is recognised where it was printed.
+    """
+    if kind not in _TEXT_KINDS or not value or not arabic.is_arabic_letters(value):
+        return False
+    if ground_field(name, value, kind, lines, labels).matches:
+        return False
+    for backwards in (value[::-1], " ".join(w[::-1] for w in value.split())):
+        g = ground_field(name, backwards, kind, lines, labels)
+        if g.anchored and g.similarity >= REVERSED_MATCH:
+            return True
+    return False

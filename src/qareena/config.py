@@ -157,12 +157,36 @@ class RetentionPolicy(_Frozen):
     image_hours: int = Field(ge=1)
 
 
+class ReaderPolicy(_Frozen):
+    """How a document is shown to the VLM. It changes what the model reads, so it is certified
+    policy, not a setting (``tools/spike/business_ab.py`` measured the effect of size)."""
+
+    long_side_px: int = Field(ge=640, le=2048)  # long side of the image sent to the model
+    long_side_px_by_document: dict[str, int] = Field(default_factory=dict)
+    retry_long_side_px: tuple[int, ...] = Field(min_length=2)  # first that differs is used once
+
+    @field_validator("long_side_px_by_document")
+    @classmethod
+    def _sizes_in_range(cls, v: dict[str, int]) -> dict[str, int]:
+        if any(not 640 <= px <= 2048 for px in v.values()):
+            raise ValueError("long sides must be within 640-2048 px")
+        return v
+
+    def long_side_for(self, doc_type: str) -> int:
+        return self.long_side_px_by_document.get(doc_type, self.long_side_px)
+
+    def retry_for(self, doc_type: str) -> int:
+        first = self.long_side_for(doc_type)
+        return next(px for px in self.retry_long_side_px if px != first)
+
+
 class Policy(_Frozen):
     policy_version: str = Field(min_length=1)
     packet: PacketPolicy
     thresholds: ThresholdPolicy
     names: NamePolicy
     evidence_loop: LoopPolicy
+    reader: ReaderPolicy
     retention: RetentionPolicy
 
 
