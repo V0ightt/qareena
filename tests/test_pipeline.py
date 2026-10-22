@@ -337,3 +337,42 @@ def test_read_size_comes_from_the_certified_policy(runtime):
     reader = runtime.policy.reader
     for doc_type, size in sizes.items():
         assert size <= reader.long_side_for(doc_type)
+
+
+class MarkerOcr:
+    """Confident text only when the dark marker is in the top-left corner (the right way up)."""
+
+    def read(self, image):
+        h, w = image.shape[:2]
+        corner = image[: h // 8, : w // 8].mean()
+        upright = w > h and corner < 80
+        score = 0.95 if upright else 0.3
+        line = OcrLine("نص واضح طويل بما يكفي للقراءة " * 4, score, ((0, 0), (10, 0), (10, 10), (0, 10)))
+        return OcrResult((line,), 0.01, w, h)
+
+
+def marked():
+    img = np.full((1080, 1712, 3), 230, np.uint8)
+    img[:200, :320] = 20  # top-left marker, larger than the corner the fake OCR looks at
+    return img
+
+
+@pytest.mark.parametrize(("turned_by", "fix"), [(cv2.ROTATE_180, 180), (cv2.ROTATE_90_CLOCKWISE, 270)])
+def test_a_rotated_photo_is_turned_upright_before_reading(runtime, turned_by, fix):
+    p = Pipeline(runtime, FakeVlm(base_values()), MarkerOcr(), today=TODAY)
+    try:
+        upright, angle = p._upright(cv2.rotate(marked(), turned_by))
+    finally:
+        p.close()
+    assert angle == fix
+    assert upright.shape[:2] == (1080, 1712)
+    assert upright[:200, :320].mean() < 80  # the marker is back in the top-left corner
+
+
+def test_an_upright_photo_is_left_alone(runtime):
+    p = Pipeline(runtime, FakeVlm(base_values()), MarkerOcr(), today=TODAY)
+    try:
+        _, angle = p._upright(marked())
+    finally:
+        p.close()
+    assert angle == 0

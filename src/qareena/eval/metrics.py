@@ -158,18 +158,37 @@ def _iou(box: Sequence[float] | None, truth: Sequence[float] | None, rdoc: dict 
     q = rdoc.get("quality", {})
     quad, size = q.get("quad"), q.get("read_size")
     x0, y0, x1, y1 = box
+    pts = np.float32([[x0, y0], [x1, y0], [x1, y1], [x0, y1]])
+    if size:
+        pts, size = unrotate(pts, size, int(q.get("rotated", 0)))
     if quad and size:
         w, h = size
         src = np.float32([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]])
         m = cv2.getPerspectiveTransform(src, np.float32(quad))
-        pts = cv2.perspectiveTransform(np.float32([[[x0, y0]], [[x1, y0]], [[x1, y1]], [[x0, y1]]]), m)[:, 0]
-        x0, y0 = pts.min(axis=0)
-        x1, y1 = pts.max(axis=0)
+        pts = cv2.perspectiveTransform(pts[:, None, :], m)[:, 0]
+    x0, y0 = pts.min(axis=0)
+    x1, y1 = pts.max(axis=0)
     tx0, ty0, tx1, ty1 = truth
     iw, ih = max(0.0, min(x1, tx1) - max(x0, tx0)), max(0.0, min(y1, ty1) - max(y0, ty0))
     inter = iw * ih
     union = (x1 - x0) * (y1 - y0) + (tx1 - tx0) * (ty1 - ty0) - inter
     return float(inter / union) if union > 0 else 0.0
+
+
+def unrotate(pts: np.ndarray, size: Sequence[int], degrees: int) -> tuple[np.ndarray, tuple[int, int]]:
+    """Map points on an image turned clockwise by ``degrees`` back to the unturned image.
+
+    ``size`` is the turned image's (width, height); returns the points and the unturned size.
+    """
+    w, h = int(size[0]), int(size[1])
+    x, y = pts[:, 0], pts[:, 1]
+    if degrees == 180:
+        return np.stack([w - 1 - x, h - 1 - y], axis=1).astype(np.float32), (w, h)
+    if degrees == 90:  # turned clockwise: (x, y) came from (y, w - 1 - x)
+        return np.stack([y, w - 1 - x], axis=1).astype(np.float32), (h, w)
+    if degrees == 270:  # turned counter-clockwise: (x, y) came from (h - 1 - y, x)
+        return np.stack([h - 1 - y, x], axis=1).astype(np.float32), (h, w)
+    return pts.astype(np.float32), (w, h)
 
 
 # --- aggregation -------------------------------------------------------------------------------

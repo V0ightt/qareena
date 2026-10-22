@@ -73,3 +73,6 @@ Every entry here was seen in our own runs, not imagined. Each one lists the evid
   - Asked whether the crop shows exactly that value, the 4B VLM said yes to 12 of 226 correct candidates and to 11 of 388 wrong ones.
   - It rejects almost everything, and its rare yes is right only about half the time. That is no evidence at all.
   - So the system still never replaces a value on its own. The OCR's reading stays a suggestion for the reviewer.
+- **Also tested and rejected: corroborating the OCR's reading with the same name on the other documents.**
+  - Of 62 ID-card name disagreements, the OCR's reading appeared on another document in 39 cases, but 4 of those 39 were still wrong: about 10% error.
+  - Copies of a name share errors, and our error budget for accepted critical fields is 1%.

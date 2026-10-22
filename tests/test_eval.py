@@ -141,3 +141,16 @@ def test_report_renders_every_section():
     text = metrics.markdown(s, "test")
     for heading in ("## Reading", "## Accepted automatically", "## Packets", "## What each part buys"):
         assert heading in text
+
+
+@pytest.mark.parametrize(("code", "degrees"), [(0, 90), (1, 180), (2, 270)])
+def test_unrotate_inverts_the_turn_the_pipeline_made(code, degrees):
+    import cv2
+
+    img = np.zeros((60, 100), np.uint8)
+    img[10, 70] = 255  # one marked pixel at (x=70, y=10)
+    turned = cv2.rotate(img, code)  # 0: clockwise, 1: 180, 2: counter-clockwise
+    ty, tx = (int(v[0]) for v in np.nonzero(turned))
+    pts, size = metrics.unrotate(np.float32([[tx, ty]]), (turned.shape[1], turned.shape[0]), degrees)
+    assert size == (100, 60)
+    assert tuple(pts[0]) == (70, 10)

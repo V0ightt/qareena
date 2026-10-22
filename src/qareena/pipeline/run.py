@@ -36,6 +36,11 @@ from qareena.readers.prompts import SYSTEM, VALUE_SCHEMA, crop_prompt, field_sch
 log = logging.getLogger(__name__)
 WRONG_DOC_NULL_SHARE = 0.7  # this share of required fields empty on a good photo -> wrong document
 RETRY_ON = ("READER_LOOPED", "INVALID_JSON")  # model failures on this image: one retry at another size
+PROBE_SIDE = 960  # orientation probe: long side of the image the OCR reads
+PROBE_MIN_SCORE = 0.75  # only confident text counts towards an orientation
+PROBE_MARGIN = 1.5  # an upside-down reading must be clearly better before we turn the image
+PROBE_UPRIGHT = 150.0  # this much confident text the right way up: upright, skip the other probe
+# (dev renders: upright min 73 / median 225; upside down max 75 / median 20)
 RECOVER_MAX = 4  # crop re-reads per document for required fields answered with a label or glyph soup
 
 
@@ -108,6 +113,12 @@ class OllamaVlmReader:
         return None if value is None else str(value)
 
 
+def _rotate(img: np.ndarray, degrees: int) -> np.ndarray:
+    """Clockwise rotation by a multiple of 90 degrees."""
+    codes = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
+    return cv2.rotate(img, codes[degrees]) if degrees in codes else img
+
+
 def encode_png(img: np.ndarray, long_side: int = 1600) -> bytes:
     h, w = img.shape[:2]
     s = long_side / max(h, w)
@@ -172,6 +183,9 @@ class Pipeline:
         if not q.ok:
             doc.reasons.append(f"QUALITY_{q.reason}")  # retakes exhausted: read best-effort, flag it
         region = q.rectified if q.rectified is not None else img
+        region, turned = self._upright(region)
+        if turned:
+            doc.quality["rotated"] = turned
         self._regions[doc_type] = region
         doc.quality["read_size"] = [int(region.shape[1]), int(region.shape[0])]
         fut = self._pool.submit(self.ocr.read, region)
@@ -234,6 +248,36 @@ class Pipeline:
         if vlm.error is None and required and empty / len(required) >= WRONG_DOC_NULL_SHARE and q.ok:
             doc.reasons.append("WRONG_DOCUMENT")
         return doc
+
+    def _upright(self, region: np.ndarray) -> tuple[np.ndarray, int]:
+        """Turn a sideways or upside-down document upright before anyone reads it.
+
+        A small OCR probe reads the image in the two orientations that its shape allows
+        (0/180 for a landscape image, 90/270 for a portrait one; our documents are all
+        landscape). Text read upside down or sideways comes out short and unsure, so the
+        orientation with clearly more confident text wins; a tie keeps the image as it is.
+        Returns (image, degrees turned clockwise).
+        """
+        h, w = region.shape[:2]
+        angles = (90, 270) if h > 1.15 * w else (0, 180)
+        scale = min(1.0, PROBE_SIDE / max(h, w))
+        small = (
+            cv2.resize(region, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+            if scale < 1
+            else region
+        )
+        scores = {}
+        for angle in angles:
+            lines = self.ocr.read(_rotate(small, angle)).lines
+            scores[angle] = sum(len(ln.text) * ln.score for ln in lines if ln.score >= PROBE_MIN_SCORE)
+            if angle == 0 and scores[0] >= PROBE_UPRIGHT:
+                return region, 0  # clearly the right way up: most documents stop here
+        first, second = angles
+        if angles == (0, 180):
+            best = 180 if scores[180] > PROBE_MARGIN * scores[0] + 1 else 0
+        else:
+            best = first if scores[first] >= scores[second] else second
+        return (_rotate(region, best), best) if best else (region, 0)
 
     def _recover(
         self,
