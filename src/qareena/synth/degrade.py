@@ -63,7 +63,7 @@ def low_light(img: np.ndarray, gain: float, noise_sigma: float, rng: np.random.G
 
 
 def glare_over(
-    img: np.ndarray, box: tuple[float, float, float, float], strength: float = 0.97, pad: float = 0.25
+    img: np.ndarray, box: tuple[float, float, float, float], strength: float = 1.0, pad: float = 0.25
 ) -> tuple[np.ndarray, np.ndarray]:
     """Bright elliptical hotspot covering ``box`` (pixels). Returns (image, coverage mask 0..1)."""
     h, w = img.shape[:2]
