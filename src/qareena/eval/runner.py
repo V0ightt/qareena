@@ -48,7 +48,9 @@ def run_split(
                 if not path.exists():
                     continue
                 try:
-                    images[doc_type] = load_image_bytes(path.read_bytes()).image
+                    images[doc_type] = load_image_bytes(
+                        path.read_bytes(), allow_pdf=runtime.settings.features.pdf_intake
+                    ).image
                 except IntakeError as exc:
                     rejected[doc_type] = exc.code
             t0 = time.perf_counter()

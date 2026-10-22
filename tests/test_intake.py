@@ -56,3 +56,30 @@ def test_pixel_bomb_is_rejected(monkeypatch):
     with pytest.raises(IntakeError) as e:
         load_image_bytes(encode(Image.new("RGB", (100, 100)), "PNG"))
     assert e.value.code == "TOO_MANY_PIXELS"
+
+
+def _pdf_of(img):
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.fromarray(img[..., ::-1]).save(buf, format="PDF", resolution=100)
+    return buf.getvalue()
+
+
+def test_a_pdf_scan_becomes_an_image_only_when_allowed():
+    img = np.full((540, 856, 3), 200, np.uint8)
+    img[100:200, 100:400] = (30, 60, 90)
+    pdf = _pdf_of(img)
+    with pytest.raises(IntakeError) as exc:
+        load_image_bytes(pdf)
+    assert exc.value.code == "UNSUPPORTED_FORMAT"
+    got = load_image_bytes(pdf, allow_pdf=True)
+    assert got.format == "PDF"
+    assert got.width > got.height > 0  # page orientation kept
+    assert got.image[got.height // 4, got.width // 4].sum() < 400  # the dark block survived
+
+
+def test_a_broken_pdf_is_a_corrupt_file_not_a_crash():
+    with pytest.raises(IntakeError) as exc:
+        load_image_bytes(b"%PDF-1.7\n this is not really a pdf", allow_pdf=True)
+    assert exc.value.code == "CORRUPT_IMAGE"

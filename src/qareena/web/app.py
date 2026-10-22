@@ -161,7 +161,7 @@ def create_app(
             if isinstance(item, FormFile) and item.filename:
                 data_bytes = await item.read()
                 try:
-                    uploads[doc_type] = _reencode(data_bytes)
+                    uploads[doc_type] = _reencode(data_bytes, allow_pdf=runtime.settings.features.pdf_intake)
                 except IntakeError as exc:
                     errors[doc_type] = text.RETAKE.get(exc.code, exc.code)
         if errors or not uploads:
@@ -187,7 +187,7 @@ def create_app(
         ):
             raise HTTPException(429, "too many checks; try again later")
         try:
-            img = load_image_bytes(await file.read()).image
+            img = load_image_bytes(await file.read(), allow_pdf=runtime.settings.features.pdf_intake).image
         except IntakeError as exc:
             return JSONResponse({"ok": False, "message": text.RETAKE.get(exc.code, exc.code)})
         q = assess(img)
@@ -217,7 +217,7 @@ def create_app(
         if doc_type not in runtime.catalog.documents or not isinstance(item, FormFile):
             raise HTTPException(400, "document and photo required")
         try:
-            blob = _reencode(await item.read())
+            blob = _reencode(await item.read(), allow_pdf=runtime.settings.features.pdf_intake)
         except IntakeError as exc:
             return templates.TemplateResponse(
                 request,
@@ -341,9 +341,9 @@ def create_app(
 # --- helpers -----------------------------------------------------------------------------
 
 
-def _reencode(data: bytes) -> bytes:
+def _reencode(data: bytes, *, allow_pdf: bool = False) -> bytes:
     """Intake checks, then a fresh JPEG: no metadata, no trailing payloads, upright."""
-    img = load_image_bytes(data).image
+    img = load_image_bytes(data, allow_pdf=allow_pdf).image
     ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 95])
     if not ok:
         raise IntakeError("CORRUPT_IMAGE", "re-encoding failed")

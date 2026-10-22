@@ -24,12 +24,13 @@ No model has been trained or fine-tuned. The confidence scorer is a small logist
 ## Libraries and tools in use
 
 - **Runtime:** Python 3.12, NumPy, SciPy, OpenCV (headless), Pillow, RapidOCR, ONNX Runtime, rapidfuzz, httpx, Pydantic and pydantic-settings, PyYAML, Ollama.
+- **PDF intake:** pypdfium2 (PDFium, first page only, no scripts).
 - **Web app:** FastAPI (Starlette), Uvicorn, python-multipart, Jinja2, SQLite (Python standard library), cryptography (Fernet for data at rest). The stylesheet and the little JavaScript are our own; no CDN, no front-end framework.
 - **Synthetic documents and screenshots:** Jinja2 templates, Playwright driving the locally installed Microsoft Edge (headless).
 - **Development:** pytest, hypothesis, ruff, uv, GitHub Actions, gitleaks.
 - **Fonts in the synthetic documents** (all SIL Open Font License, licence texts in `src/qareena/synth/fonts/`): Noto Naskh Arabic, Amiri, Aref Ruqaa, IBM Plex Sans Arabic, IBM Plex Mono.
 
-**Planned, not used yet:** pypdfium2 (PDF intake), pillow-heif (iPhone photos). HTMX and Tailwind CSS were planned and then dropped (ADR-007).
+**Planned, not used yet:** pillow-heif (iPhone photos). HTMX and Tailwind CSS were planned and then dropped (ADR-007).
 
 The design brief is hand-written HTML/CSS, rendered to PDF with Microsoft Edge (headless). Its fonts are IBM Plex Sans, IBM Plex Sans Arabic and IBM Plex Mono (SIL OFL).
 

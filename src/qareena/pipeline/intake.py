@@ -2,6 +2,8 @@
 
 * The format is decided from the bytes (magic numbers), never from the name or Content-Type.
 * Only PNG, JPEG and WebP are decoded, through Pillow with an explicit format allowlist.
+* A PDF (only when the caller allows it: the ``pdf_intake`` flag) is rasterised with pdfium:
+  first page only, no scripts, rendered at most 200 dpi and never past the pixel cap.
 * Size and pixel caps; Pillow's decompression-bomb warning is promoted to an error.
 * EXIF orientation is applied, then pixels are copied into a fresh array: all metadata,
   including GPS, is dropped and nothing from the original container survives.
@@ -49,9 +51,13 @@ def sniff(data: bytes) -> str | None:
     return None
 
 
-def load_image_bytes(data: bytes) -> Intake:
+def load_image_bytes(data: bytes, *, allow_pdf: bool = False) -> Intake:
     if len(data) > MAX_BYTES:
         raise IntakeError("FILE_TOO_LARGE", f"{len(data)} bytes")
+    if data.startswith(b"%PDF-"):
+        if not allow_pdf:
+            raise IntakeError("UNSUPPORTED_FORMAT", "PDF intake is switched off")
+        return _load_pdf(data)
     fmt = sniff(data)
     if fmt is None:
         raise IntakeError("UNSUPPORTED_FORMAT", "not a PNG, JPEG or WebP image")
@@ -71,3 +77,33 @@ def load_image_bytes(data: bytes) -> Intake:
             raise IntakeError("CORRUPT_IMAGE", type(exc).__name__) from None
     bgr = np.ascontiguousarray(rgb[..., ::-1])
     return Intake(bgr, fmt, bgr.shape[1], bgr.shape[0])
+
+
+PDF_DPI = 200
+
+
+def _load_pdf(data: bytes) -> Intake:
+    """First page of a PDF scan as an image. pdfium in these wheels has no JavaScript engine."""
+    import pypdfium2 as pdfium
+
+    try:
+        pdf = pdfium.PdfDocument(data)
+    except Exception as exc:  # pdfium raises its own error types for broken files
+        raise IntakeError("CORRUPT_IMAGE", f"PDF: {type(exc).__name__}") from None
+    try:
+        if len(pdf) == 0:
+            raise IntakeError("CORRUPT_IMAGE", "PDF has no pages")
+        page = pdf[0]
+        w_pt, h_pt = page.get_size()
+        if w_pt <= 0 or h_pt <= 0:
+            raise IntakeError("CORRUPT_IMAGE", "PDF page has no size")
+        scale = min(PDF_DPI / 72.0, (MAX_PIXELS / (w_pt * h_pt)) ** 0.5)
+        rgb = np.asarray(page.render(scale=scale).to_pil().convert("RGB"), dtype=np.uint8)
+    except IntakeError:
+        raise
+    except Exception as exc:
+        raise IntakeError("CORRUPT_IMAGE", f"PDF: {type(exc).__name__}") from None
+    finally:
+        pdf.close()
+    bgr = np.ascontiguousarray(rgb[..., ::-1])
+    return Intake(bgr, "PDF", bgr.shape[1], bgr.shape[0])

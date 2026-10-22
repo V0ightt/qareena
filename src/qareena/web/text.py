@@ -20,7 +20,7 @@ RETAKE: dict[str, str] = {
     "TILTED": "البطاقة مايلة. خلّي الموبايل فوگها عدل.",
     "WRONG_DOCUMENT": "هاي مو الوثيقة المطلوبة. صوّر الوثيقة الصحيحة رجاءً.",
     "DOC_MISSING": "هاي الوثيقة بعدها ما وصلتنا. صوّرها ودزها رجاءً.",
-    "UNSUPPORTED_FORMAT": "نوع الملف مو مدعوم. دز صورة JPG أو PNG.",
+    "UNSUPPORTED_FORMAT": "نوع الملف مو مدعوم. دز صورة JPG أو PNG أو ملف PDF.",
     "FILE_TOO_LARGE": "الملف كبير هواية. دز صورة أصغر.",
     "CORRUPT_IMAGE": "ما گدرنا نفتح الصورة. صوّرها مرة لخ.",
     "NOT_A_DOCUMENT": "ما لگينا وثيقة بالصورة. صوّر الوثيقة نفسها.",
@@ -111,6 +111,14 @@ CROSS_RESULT: dict[str, str] = {
 }
 
 NOT_CHECKED = "ما تحققنا من أصالة الوثائق ولا من مطابقة الوجه."
+
+
+def retake(code: str) -> str:
+    """The applicant's message for a retake code, naming the document when we know what it is."""
+    base, _, detail = code.partition(":")
+    if base == "WRONG_DOCUMENT" and detail in DOCUMENT:
+        return f"هاي تبين {DOCUMENT[detail]}، مو الوثيقة المطلوبة هنا. صوّر الوثيقة الصحيحة رجاءً."
+    return RETAKE.get(base, code)
 
 
 def reason(code: str) -> str:

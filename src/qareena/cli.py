@@ -11,7 +11,7 @@ from pathlib import Path
 
 from qareena.config import Settings, load_runtime
 
-IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".pdf")
 
 
 def _synth_packet(args: argparse.Namespace) -> int:
@@ -60,7 +60,9 @@ def _run(args: argparse.Namespace) -> int:
     for path in sorted(args.packet_dir.iterdir()):
         if path.suffix.lower() in IMAGE_SUFFIXES and path.stem in runtime.catalog.documents:
             try:
-                images[path.stem] = load_image_bytes(path.read_bytes()).image
+                images[path.stem] = load_image_bytes(
+                    path.read_bytes(), allow_pdf=runtime.settings.features.pdf_intake
+                ).image
             except IntakeError as exc:
                 problems[path.stem] = exc.code
     today = dt.date.fromisoformat(args.today) if args.today else None

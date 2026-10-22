@@ -41,6 +41,8 @@ PROBE_MIN_SCORE = 0.75  # only confident text counts towards an orientation
 PROBE_MARGIN = 1.5  # an upside-down reading must be clearly better before we turn the image
 PROBE_UPRIGHT = 150.0  # this much confident text the right way up: upright, skip the other probe
 # (dev renders: upright min 73 / median 225; upside down max 75 / median 20)
+LOOKS_LIKE_MIN = 3  # distinctive labels of another document type needed to call it the wrong one
+LOOKS_LIKE_MARGIN = 3  # ...and this many more than the expected type's labels
 RECOVER_MAX = 4  # crop re-reads per document for required fields answered with a label or glyph soup
 
 
@@ -245,9 +247,34 @@ class Pipeline:
             doc.fields[name] = rec
         required = [n for n, s in spec_doc.fields.items() if s.required]
         empty = sum(doc.fields[n].raw is None for n in required)
-        if vlm.error is None and required and empty / len(required) >= WRONG_DOC_NULL_SHARE and q.ok:
+        looks_like = self._looks_like(doc_type, ocr.lines, labels)
+        if looks_like is not None:
+            doc.reasons.append(f"WRONG_DOCUMENT:{looks_like}")  # printed labels of another document
+        elif vlm.error is None and required and empty / len(required) >= WRONG_DOC_NULL_SHARE and q.ok:
             doc.reasons.append("WRONG_DOCUMENT")
         return doc
+
+    def _looks_like(self, doc_type: str, lines: tuple[OcrLine, ...], labels: LabelMap) -> str | None:
+        """Another document type, if clearly more of *its* printed labels are on this image.
+
+        Only labels distinctive of each type count (shared ones such as «تاريخ الإصدار» say
+        nothing). An unfamiliar layout of the right document finds few labels of any type, so
+        it is never sent back by this rule.
+        """
+        catalog = self.rt.catalog
+        mine = {spec.label_ar for spec in catalog.documents[doc_type].fields.values()}
+        found_mine = len(labels.label_box)
+        best, best_n = None, 0
+        for other, spec_doc in catalog.documents.items():
+            if other == doc_type:
+                continue
+            found = map_labels(spec_doc, lines).label_box
+            n = sum(1 for f in found if spec_doc.fields[f].label_ar not in mine)
+            if n > best_n:
+                best, best_n = other, n
+        if best is not None and best_n >= LOOKS_LIKE_MIN and best_n >= found_mine + LOOKS_LIKE_MARGIN:
+            return best
+        return None
 
     def _upright(self, region: np.ndarray) -> tuple[np.ndarray, int]:
         """Turn a sideways or upside-down document upright before anyone reads it.

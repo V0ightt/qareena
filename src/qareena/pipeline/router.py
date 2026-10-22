@@ -55,7 +55,7 @@ def route(
                 (
                     r.removeprefix("QUALITY_")
                     for r in doc.reasons
-                    if r in RETAKE_REASONS or r.startswith("QUALITY_")
+                    if r.split(":", 1)[0] in RETAKE_REASONS or r.startswith("QUALITY_")
                 ),
                 None,
             )

@@ -19,11 +19,11 @@
       {% for doc_type, reason in result.retake.items() %}
         <li>
           <strong>{{ text.DOCUMENT.get(doc_type, doc_type) }}</strong>
-          <p>{{ text.RETAKE.get(reason, reason) }}</p>
+          <p>{{ text.retake(reason) }}</p>
           {% if errors.get(doc_type) %}<p class="error" role="alert">{{ errors[doc_type] }}</p>{% endif %}
           <form method="post" action="/cases/{{ case.id }}/retake" enctype="multipart/form-data" class="retake-form" data-check="{{ doc_type }}">
             <input type="hidden" name="doc_type" value="{{ doc_type }}">
-            <input type="file" name="file" accept="image/jpeg,image/png,image/webp" capture="environment" required>
+            <input type="file" name="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" required>
             <span class="slot-msg" aria-live="polite"></span>
             <button type="submit" class="primary">إرسال الصورة الجديدة</button>
           </form>

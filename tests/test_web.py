@@ -100,7 +100,7 @@ def test_a_non_image_is_rejected_with_an_iraqi_arabic_message(setup):
         "/cases", files={"tax_card": ("x.png", b"<script>alert(1)</script>", "image/png")}, headers=ORIGIN
     )
     assert r.status_code == 400
-    assert "نوع الملف مو مدعوم" in r.text
+    assert "نوع الملف مو مدعوم" in r.text  # Iraqi Arabic, names the formats
 
 
 def test_full_flow_upload_read_review_approve(setup):
@@ -230,3 +230,11 @@ def test_submissions_are_rate_limited_per_address(setup, monkeypatch):
         for _ in range(3)
     ]
     assert codes[-1] == 429
+
+
+def test_wrong_document_message_names_what_we_saw():
+    from qareena.web import text
+
+    msg = text.retake("WRONG_DOCUMENT:iq_national_card_front")
+    assert "البطاقة الوطنية (الوجه)" in msg
+    assert text.retake("WRONG_DOCUMENT") == text.RETAKE["WRONG_DOCUMENT"]

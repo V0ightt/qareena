@@ -10,7 +10,7 @@
     {% for doc_type in catalog.documents %}
     <label class="slot" data-check="{{ doc_type }}">
       <span class="slot-title">{{ text.DOCUMENT[doc_type] }}</span>
-      <input type="file" name="{{ doc_type }}" accept="image/jpeg,image/png,image/webp" capture="environment">
+      <input type="file" name="{{ doc_type }}" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment">
       <span class="slot-msg" aria-live="polite">{% if errors.get(doc_type) %}<span class="error">{{ errors[doc_type] }}</span>{% endif %}</span>
     </label>
     {% endfor %}

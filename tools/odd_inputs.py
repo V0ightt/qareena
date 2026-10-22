@@ -104,6 +104,7 @@ def build() -> None:
     cases["truncated_file"] = (png.tobytes()[: len(png) // 3], "CORRUPT_IMAGE at intake")
     cases["not_an_image"] = (b"%!PS-Adobe-3.0\n%% not an image\n", "UNSUPPORTED_FORMAT at intake")
     cases["pixel_bomb"] = (_png_bomb(), "TOO_MANY_PIXELS at intake")
+    cases["pdf_scan"] = (_pdf_of(_photo(tax, nrng)), "rasterised and read like a photo")
     for name, (payload, expect) in cases.items():
         d = OUT / name
         d.mkdir(parents=True, exist_ok=True)
@@ -119,6 +120,16 @@ def build() -> None:
             json.dumps({"case": name, "slot": SLOT, "expect": expect}, ensure_ascii=False), encoding="utf-8"
         )
     print(f"built {len(cases)} cases under {OUT}")
+
+
+def _pdf_of(img: np.ndarray) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.fromarray(img[..., ::-1]).save(buf, format="PDF", resolution=150)
+    return buf.getvalue()
 
 
 def _png_bomb(side: int = 9000) -> bytes:
@@ -149,7 +160,9 @@ def run() -> int:
                 images, rejected = {}, {}
                 for doc_type in rt.catalog.documents:
                     try:
-                        images[doc_type] = load_image_bytes((d / f"{doc_type}.png").read_bytes()).image
+                        images[doc_type] = load_image_bytes(
+                            (d / f"{doc_type}.png").read_bytes(), allow_pdf=rt.settings.features.pdf_intake
+                        ).image
                     except IntakeError as exc:
                         rejected[doc_type] = exc.code
                 try:
