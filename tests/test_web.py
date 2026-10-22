@@ -218,3 +218,15 @@ def test_workbench_offers_the_ocr_reading_when_the_readers_disagree(tmp_path):
         page = client.get(f"/review/{case_id}", headers=AUTH).text
         assert "القارئ الثاني قرأ" in page
         assert "الجبوري" in page  # the OCR's reading, offered as one click
+
+
+def test_submissions_are_rate_limited_per_address(setup, monkeypatch):
+    client, _, _ = setup
+    import qareena.web.app as web
+
+    monkeypatch.setattr(web, "MAX_CASES_PER_HOUR", 2)
+    codes = [
+        client.post("/cases", files={"tax_card": ("x.png", b"x", "image/png")}, headers=ORIGIN).status_code
+        for _ in range(3)
+    ]
+    assert codes[-1] == 429

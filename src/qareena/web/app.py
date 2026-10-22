@@ -49,6 +49,7 @@ log = logging.getLogger(__name__)
 HERE = Path(__file__).resolve().parent
 READ_SUFFIX = "#read"  # stored next to each upload: the flattened image the readers saw
 MAX_CASES_PER_HOUR = 30  # per client address, for the open applicant page
+MAX_CHECKS_PER_HOUR = 300  # instant quality checks (about 0.1 s of CPU each)
 CSP = (
     "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; "
     "frame-ancestors 'none'; form-action 'self'; base-uri 'none'"
@@ -177,10 +178,14 @@ def create_app(
         return RedirectResponse(f"/cases/{case_id}", status_code=303)
 
     @app.post("/check/{doc_type}")
-    async def quick_check(doc_type: str, file: UploadFile) -> JSONResponse:
+    async def quick_check(request: Request, doc_type: str, file: UploadFile) -> JSONResponse:
         """The quality gate alone (about a second), so the applicant can retake at once."""
         if doc_type not in runtime.catalog.documents:
             raise HTTPException(404)
+        if not _allow(
+            state, "check:" + (request.client.host if request.client else "?"), MAX_CHECKS_PER_HOUR
+        ):
+            raise HTTPException(429, "too many checks; try again later")
         try:
             img = load_image_bytes(await file.read()).image
         except IntakeError as exc:
@@ -380,11 +385,12 @@ def _enqueue(state: AppState, case_id: str) -> None:
     state.worker.submit(_process, state, case_id)
 
 
-def _allow(state: AppState, client: str) -> bool:
+def _allow(state: AppState, client: str, limit: int | None = None) -> bool:
+    limit = MAX_CASES_PER_HOUR if limit is None else limit  # read at call time, not at definition
     now = time.time()
     with state._lock:
         recent = [t for t in state._recent.get(client, []) if now - t < 3600]
-        if len(recent) >= MAX_CASES_PER_HOUR:
+        if len(recent) >= limit:
             return False
         state._recent[client] = [*recent, now]
         return True
