@@ -151,7 +151,14 @@ class Pipeline:
         doc = DocumentRead(
             doc_type=doc_type,
             image_id=image_id,
-            quality={"ok": q.ok, "reason": q.reason, "metrics": q.metrics, "notes": list(q.notes)},
+            quality={
+                "ok": q.ok,
+                "reason": q.reason,
+                "metrics": q.metrics,
+                "notes": list(q.notes),
+                # the document outline in the photo; evidence boxes are on the rectified read image
+                "quad": None if q.quad is None else [[round(float(v), 1) for v in p] for p in q.quad],
+            },
         )
         doc.timings["quality_s"] = round(time.perf_counter() - t0, 3)
         if not q.ok and q.reason in router.RETAKE_REASONS and not force:

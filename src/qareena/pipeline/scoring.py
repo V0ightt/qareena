@@ -111,11 +111,16 @@ class Certificate:
             tuple(d["weights"]),
             d.get("tau_critical"),
             d.get("tau_other"),
-            d.get("report", {}),
+            d.get("report", {}) | {"features": d.get("features", list(FEATURES))},
         )
 
     def matches(self, runtime: Runtime) -> bool:
-        return self.policy_sha256 == runtime.policy_sha256 and self.vlm_model == runtime.settings.vlm_model
+        return (
+            self.policy_sha256 == runtime.policy_sha256
+            and self.vlm_model == runtime.settings.vlm_model
+            and len(self.weights) == len(FEATURES)
+            and self.report.get("features", list(FEATURES)) == list(FEATURES)
+        )
 
 
 def certificate_path(runtime: Runtime) -> Path:
@@ -130,6 +135,15 @@ def load_certificate(runtime: Runtime) -> Certificate | None:
     return cert if cert.matches(runtime) else None
 
 
+def eligible(rec: FieldRecord) -> bool:
+    """May this field be accepted at all, whatever its score? The one rule shared by the band
+    assignment and threshold certification, so what is certified is exactly what is accepted."""
+    if rec.value is None or rec.blocking:
+        return False
+    caution = [r for r in rec.reasons if not r.startswith("NOTE_") and r not in ("OCR_AMBIGUOUS_BOX",)]
+    return not caution and (not rec.critical or any(src in INDEPENDENT for src in rec.sources))  # ADR-004
+
+
 def assign_band(rec: FieldRecord, kind: FieldKind, scorer: Scorer, cert: Certificate | None) -> None:
     """Set ``p_correct`` and ``band``. Empty optional fields get no band (shown as blank)."""
     if rec.value is None:
@@ -139,13 +153,6 @@ def assign_band(rec: FieldRecord, kind: FieldKind, scorer: Scorer, cert: Certifi
     if rec.blocking:
         rec.band = Band.REVIEW
         return
-    caution = [r for r in rec.reasons if not r.startswith("NOTE_") and r not in ("OCR_AMBIGUOUS_BOX",)]
     tau = None if cert is None else (cert.tau_critical if rec.critical else cert.tau_other)
-    accept = (
-        scorer.certified
-        and tau is not None
-        and rec.p_correct >= tau
-        and not caution
-        and (not rec.critical or any(src in INDEPENDENT for src in rec.sources))  # ADR-004
-    )
+    accept = scorer.certified and tau is not None and rec.p_correct >= tau and eligible(rec)
     rec.band = Band.ACCEPT if accept else Band.CHECK

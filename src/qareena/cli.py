@@ -139,6 +139,61 @@ def _verify(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def _eval(args: argparse.Namespace) -> int:
+    from qareena.eval import fit, metrics
+    from qareena.pipeline.scoring import PROVISIONAL, load_certificate
+
+    runtime = load_runtime(Settings())
+    split_dir = args.data / args.split
+    run_dir = args.run or Path("var/runs") / args.split
+    if args.action == "run":
+        from qareena.eval.runner import run_split
+        from qareena.pipeline.run import OllamaVlmReader
+        from qareena.readers.ocr import ArabicOcr
+        from qareena.readers.ollama import OllamaClient
+
+        with OllamaClient(runtime.settings.ollama_url, timeout_s=300) as client:
+            run = run_split(
+                split_dir,
+                run_dir,
+                runtime=runtime,
+                vlm=OllamaVlmReader(runtime, client),
+                ocr=ArabicOcr(),
+                limit=args.limit,
+                progress=lambda m: print(m, flush=True),
+            )
+        print(json.dumps(run, indent=1, ensure_ascii=False))
+        return 0
+    rows, packets = metrics.load(split_dir, run_dir, runtime.catalog)
+    if args.action == "fit":
+        train = fit.training_rows(rows)
+        weights = fit.fit_logistic(train)
+        fit.save_weights(weights, args.weights, fitted_on=str(run_dir), n=len(train))
+        print(f"scorer fitted on {len(train)} fields -> {args.weights}")
+        return 0
+    if args.action == "certify":
+        weights = json.loads(args.weights.read_text(encoding="utf-8"))["weights"]
+        cert = fit.certify(rows, weights, runtime)
+        print(json.dumps({k: cert[k] for k in ("tau_critical", "tau_other")}, indent=1))
+        return 0
+    # report: the certified scorer if there is one, else fitted weights, else the provisional one
+    cert = load_certificate(runtime)
+    if cert is not None:
+        weights, taus = cert.weights, (cert.tau_critical, cert.tau_other)
+    elif args.weights.exists():
+        weights, taus = tuple(json.loads(args.weights.read_text(encoding="utf-8"))["weights"]), (None, None)
+    else:
+        weights, taus = PROVISIONAL.weights, (None, None)
+    if args.tau is not None:  # what-if, for development only: never written anywhere
+        taus = (args.tau, args.tau)
+    summary = metrics.summarize(rows, packets, weights=weights, taus=taus)
+    summary["unsafe_prechecks"] = metrics.unsafe_prechecks(rows, packets)
+    text = json.dumps(summary, indent=1, ensure_ascii=False)
+    (run_dir / "metrics.json").write_text(text, encoding="utf-8", newline="\n")
+    print(text)
+    return 0
+
+
 def _status(args: argparse.Namespace) -> int:
     from qareena.pipeline.scoring import certificate_path, load_certificate
     from qareena.readers.ollama import OllamaClient, OllamaError
@@ -192,6 +247,15 @@ def main(argv: list[str] | None = None) -> int:
     ve.add_argument("--split", required=True, choices=splits)
     ve.add_argument("--data", type=Path, default=Path("var/data"))
     ve.set_defaults(func=_verify)
+    ev = sub.add_parser("eval", help="run a split, report metrics, fit the scorer, certify thresholds")
+    ev.add_argument("action", choices=("run", "report", "fit", "certify"))
+    ev.add_argument("--split", required=True, choices=splits)
+    ev.add_argument("--data", type=Path, default=Path("var/data"))
+    ev.add_argument("--run", type=Path, help="trace directory (default var/runs/<split>)")
+    ev.add_argument("--limit", type=int, help="run only the first N packets")
+    ev.add_argument("--weights", type=Path, default=Path("var/scorer/weights.json"))
+    ev.add_argument("--tau", type=float, help="report: what-if threshold (development only)")
+    ev.set_defaults(func=_eval)
     st = sub.add_parser("status", help="configuration fingerprint, certification and model server health")
     st.set_defaults(func=_status)
     args = ap.parse_args(argv)

@@ -14,7 +14,7 @@ Each field also carries a calibrated score and an action band: مطابق (match
 
 A person signs off every file. Qareena never fills in a field it couldn't read, and it never follows text written inside a document. "Pre-checked" never means "identity verified": face matching, liveness and forgery detection are out of scope.
 
-> **Status (22 Oct 2026): design stage.** The design brief is submitted, and the build starts on 23 Oct. No results are claimed yet.
+> **Status (22 Oct 2026): building.** The pipeline runs end to end on fictional packets (quality gate → two readers → label-anchored grounding → rules → scoring → routing), and the dataset builder and evaluation harness exist. Spike results are in [`docs/spike/`](docs/spike/). **No test-set results are claimed yet:** Test-A opens at the MVP (6 Nov).
 
 ## Documents
 
@@ -39,8 +39,30 @@ flowchart LR
 
 Everything in the live path runs on one machine. Document images and PII do not leave it.
 
+## Run it
+
+Requirements: Windows or Linux, Python 3.12, [uv](https://docs.astral.sh/uv/), [Ollama](https://ollama.com) ≥ 0.40 with `qwen3.5:4b`, and Microsoft Edge (used headless to render the fictional documents).
+
+```bash
+uv sync --group synth                      # dependencies (synth: templates + renderer)
+ollama pull qwen3.5:4b
+uv run qareena status                      # configuration fingerprint, certificate, model server
+
+# one fictional packet, then read it
+uv run qareena synth-packet --scenario grandfather_conflict --layout a --out var/packets/P1
+uv run qareena run var/packets/P1
+
+# evaluation: build a split, run it, fit the scorer (dev), certify thresholds (calib), report
+uv run qareena build-dataset --split dev
+uv run qareena eval run --split dev
+uv run qareena eval fit --split dev
+uv run qareena eval report --split dev
+```
+
+Images, traces and certificates go to `var/` (git-ignored). The seals of the test splits go to `docs/data/seals/` and are committed.
+
 ## Ground rules this repo follows
 
 - **Synthetic data only.** All documents are fictional, rendered from our own SPECIMEN templates. No real documents are ever used.
-- **No secrets in git.** Configuration goes in `.env` (see `.env.example`). A gitleaks secret scan is added to CI on 24 Oct.
+- **No secrets in git.** Configuration goes in `.env` (see `.env.example`). CI runs a gitleaks secret scan on every push.
 - **Two held-out test sets are sealed by hash** when they are created. Test-A is opened at the MVP; Test-B is opened once, at the progress review.
