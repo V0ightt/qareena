@@ -168,6 +168,9 @@ def _eval(args: argparse.Namespace) -> int:
         return 0
     rows, packets = metrics.load(split_dir, run_dir, runtime.catalog)
     if args.action == "fit":
+        for extra in args.also or ():  # more training splits, e.g. a calibration split already opened
+            more, _ = metrics.load(args.data / extra, Path("var/runs") / extra, runtime.catalog)
+            rows = rows + more
         train = fit.training_rows(rows)
         weights = fit.fit_logistic(train)
         fit.save_weights(weights, args.weights, fitted_on=str(run_dir), n=len(train))
@@ -296,6 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--run", type=Path, help="trace directory (default var/runs/<split>)")
     ev.add_argument("--limit", type=int, help="run only the first N packets")
     ev.add_argument("--weights", type=Path, default=Path("var/scorer/weights.json"))
+    ev.add_argument("--also", nargs="+", choices=splits, help="fit: also train on these splits' runs")
     ev.add_argument("--tau", type=float, help="report: what-if threshold (development only)")
     ev.set_defaults(func=_eval)
     sv = sub.add_parser("serve", help="the web app: capture page, reviewer workbench, system page")

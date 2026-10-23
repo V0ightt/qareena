@@ -17,6 +17,7 @@ from typing import Protocol
 
 from qareena.config import FieldKind, Runtime
 from qareena.pipeline.records import Band, FieldRecord, Source
+from qareena.text import arabic
 
 # Evidence that does not come from the VLM itself. A same-model re-read is a signal, not a source.
 INDEPENDENT = frozenset({Source.OCR, Source.MRZ, Source.CROSS_DOC})
@@ -31,8 +32,8 @@ KINDS = (
     FieldKind.TEXT,
     FieldKind.ENUM,
 )
-# An exact OCR match at the field's own label means different things per kind: near proof for
-# a 10-digit number, weaker for a name (the readers can share a misreading of similar glyphs).
+# A verbatim OCR match at the field's own label means different things per kind: near proof
+# for a 10-digit number, weaker for a name (the readers can share a misreading of similar glyphs).
 EXACT_BY_KIND = (
     FieldKind.NAME_PART,
     FieldKind.FULL_NAME,
@@ -50,7 +51,8 @@ FEATURES = (
     "src_ocr",  # anchored at the field's own label
     "ocr_unanchored",
     "ocr_ambiguous",
-    "ocr_exact",  # anchored and verbatim (after folding)
+    "ocr_exact",  # anchored, and the value occurs in the OCR line at the spelling layer
+    "ocr_verbatim",  # anchored, and the OCR text at the label IS the value, letter for letter
     "ocr_score",
     "src_mrz",
     "src_cross_doc",
@@ -60,7 +62,7 @@ FEATURES = (
     "recovered",
     "value_len",
     *(f"kind_{k.value}" for k in KINDS),
-    *(f"ocr_exact_x_{k.value}" for k in EXACT_BY_KIND),
+    *(f"ocr_verbatim_x_{k.value}" for k in EXACT_BY_KIND),
     "mrz_x_digits",
     "cross_doc_x_name_part",
 )
@@ -73,6 +75,7 @@ def features(rec: FieldRecord, kind: FieldKind) -> list[float]:
     caution = [r for r in rec.reasons if not r.startswith("NOTE_")]
     anchored = Source.OCR in rec.sources
     exact = float(anchored and ev.ocr_similarity >= 0.999)
+    verbatim = float(anchored and _verbatim(rec.value, ev.ocr_text, kind))
     mrz = float(Source.MRZ in rec.sources)
     cross = float(Source.CROSS_DOC in rec.sources)
     return [
@@ -84,6 +87,7 @@ def features(rec: FieldRecord, kind: FieldKind) -> list[float]:
         float(Source.OCR_UNANCHORED in rec.sources),
         float(ev.ocr_matches > 1),
         exact,
+        verbatim,
         ev.ocr_score or 0.0,
         mrz,
         cross,
@@ -93,10 +97,22 @@ def features(rec: FieldRecord, kind: FieldKind) -> list[float]:
         float("NOTE_RECOVERED_FROM_CROP" in rec.reasons),
         min(len(rec.value or ""), 40) / 20.0,
         *(float(kind == k) for k in KINDS),
-        *(exact * float(kind == k) for k in EXACT_BY_KIND),
+        *(verbatim * float(kind == k) for k in EXACT_BY_KIND),
         mrz * float(kind == FieldKind.DIGITS),
         cross * float(kind == FieldKind.NAME_PART),
     ]
+
+
+def _verbatim(value: str | None, ocr_text: str | None, kind: FieldKind) -> bool:
+    """The OCR text at the label equals the whole value: same letters (ى is not ي, ة is not ه),
+    same digits, nothing missing. Agreement only at the spelling layer, or a value that is a
+    mere substring of the OCR line («8699» in «88699»), is weaker evidence."""
+    if not value or not ocr_text:
+        return False
+    if kind in (FieldKind.DIGITS, FieldKind.DATE):
+        digits = lambda t: "".join(ch for ch in arabic.normalize_digits(t) if ch.isdigit())  # noqa: E731
+        return digits(value) == digits(ocr_text)
+    return arabic.strict(value).replace(" ", "").upper() == arabic.strict(ocr_text).replace(" ", "").upper()
 
 
 class Scorer(Protocol):

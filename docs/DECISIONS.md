@@ -73,6 +73,14 @@ The format follows lightweight Architecture Decision Records. New decisions are 
   - the feature flags.
 
   Change any of them and nothing can be pre-checked until certification is run again. Certification also refuses calibration traces whose recorded fingerprint differs from the current configuration, so code cannot change between the run and the certificate.
+- **Calibration history (23 Oct), stated plainly.**
+  - The first calibration split (`calib`, 150 packets) certified two scorers:
+    - v1: critical τ 0.99, 0/362 errors.
+    - v2: critical τ 0.995, 0/343 errors.
+  - We then opened its errors to understand why τ 0.99 failed, and found the readers agreeing at the spelling layer only (ى/ي, ة/ه) and a value that was a substring of the OCR line. Dev showed the same first pattern, so the fix (scorer v3: letter-exact, whole-value agreement) is justified by dev alone.
+  - Because `calib` was looked at, it can no longer certify. It became training data for the scorer.
+  - A fresh `calib2` (300 packets, new people) certifies v3, once. Its size also gives the 1% bound enough power to certify a usable threshold.
+- **The binding is split** into the reading code (must equal the code that produced the calibration traces) and the scorer (bound to the certificate). A new scorer can therefore be certified on existing traces, which are scored afresh. The rule for which sources count as independent is pinned separately, because the evidence loop uses it too.
 
 ## ADR-006 · Fail fast: test the riskiest assumption on day 1
 - **Context.** The riskiest assumption is that a local model on an 8 GB laptop GPU reads Arabic ID fields well enough, with usable signals (valid JSON, logprobs, OCR agreement), at acceptable latency. Everything else depends on it.
