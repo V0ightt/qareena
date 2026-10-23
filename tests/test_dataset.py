@@ -48,7 +48,7 @@ def test_people_are_unique_across_splits_and_reproducible():
         for s in small.values()
         for p in unique_packets(s, 7, TODAY, seen)
     ]
-    assert len(ids) == len(set(ids)) == 48
+    assert len(ids) == len(set(ids)) == 12 * len(SPLITS)
     again = [
         p.values["iq_national_card_front"]["national_id_number"]
         for p in unique_packets(small["dev"], 7, TODAY, set())
