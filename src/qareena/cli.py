@@ -9,7 +9,7 @@ import random
 import sys
 from pathlib import Path
 
-from qareena.config import Settings, load_runtime
+from qareena.config import Runtime, Settings, load_runtime
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".pdf")
 
@@ -168,7 +168,11 @@ def _eval(args: argparse.Namespace) -> int:
         return 0
     rows, packets = metrics.load(split_dir, run_dir, runtime.catalog)
     if args.action == "fit":
+        # features describe what the current code reads: traces from other code would train a
+        # scorer for a pipeline that no longer exists
+        _check_run(run_dir, runtime)
         for extra in args.also or ():  # more training splits, e.g. a calibration split already opened
+            _check_run(Path("var/runs") / extra, runtime)
             more, _ = metrics.load(args.data / extra, Path("var/runs") / extra, runtime.catalog)
             rows = rows + more
         train = fit.training_rows(rows)
@@ -177,8 +181,7 @@ def _eval(args: argparse.Namespace) -> int:
         print(f"scorer fitted on {len(train)} fields -> {args.weights}")
         return 0
     if args.action == "certify":
-        run_record = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
-        fit.check_same_configuration(run_record["fingerprint"], runtime)
+        _check_run(run_dir, runtime)
         weights = json.loads(args.weights.read_text(encoding="utf-8"))["weights"]
         cert = fit.certify(rows, weights, runtime)
         print(json.dumps({k: cert[k] for k in ("tau_critical", "tau_other")}, indent=1))
@@ -203,6 +206,13 @@ def _eval(args: argparse.Namespace) -> int:
     (run_dir / "metrics.json").write_text(text, encoding="utf-8", newline="\n")
     print(text)
     return 0
+
+
+def _check_run(run_dir: Path, runtime: Runtime) -> None:
+    from qareena.eval.fit import check_same_configuration
+
+    record = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    check_same_configuration(record["fingerprint"], runtime)
 
 
 def _serve(args: argparse.Namespace) -> int:

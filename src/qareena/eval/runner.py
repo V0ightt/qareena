@@ -3,7 +3,8 @@
 One JSON trace per packet (the full ``PacketResult``) plus ``run.json`` with the configuration
 fingerprint, the split's manifest hash and the timing. Metrics are computed afterwards from
 these files (``eval.metrics``), so one run serves every metric and every ablation. A run can
-be resumed: packets that already have a trace are skipped.
+be resumed: packets that already have a trace are skipped, but only if that trace was made by
+the same configuration, so one ``run.json`` never vouches for a mix.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from qareena.config import Runtime
+from qareena.eval.fit import check_same_configuration
 from qareena.pipeline.intake import IntakeError, load_image_bytes
 from qareena.pipeline.run import OcrReader, Pipeline, VlmReader
 
@@ -41,6 +43,11 @@ def run_split(
         for pdir in packets:
             trace = out_dir / f"{pdir.name}.json"
             if trace.exists():
+                made_by = json.loads(trace.read_text(encoding="utf-8"))["fingerprint"]
+                try:
+                    check_same_configuration(made_by, runtime)
+                except ValueError as exc:
+                    raise ValueError(f"{trace}: {exc} into a new --run directory") from exc
                 continue
             images, rejected = {}, {}
             for doc_type in runtime.catalog.documents:

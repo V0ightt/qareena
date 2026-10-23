@@ -164,3 +164,40 @@ def test_certification_refuses_traces_from_other_code(tmp_path):
         fit.check_same_configuration(other, runtime)
     # a different scorer is fine: the traces are scored afresh
     fit.check_same_configuration(runtime.fingerprint | {"scoring_sha256": "0" * 64}, runtime)
+
+
+def test_a_resumed_run_refuses_traces_from_another_configuration(tmp_path):
+    import sys
+    from pathlib import Path
+
+    import cv2
+
+    from qareena.eval.runner import run_split
+
+    sys.path.insert(0, str(Path(__file__).parent))
+    from test_pipeline import FakeOcr, FakeVlm, images
+    from test_rules import base_values
+
+    runtime = load_runtime(Settings(_env_file=None, data_dir=tmp_path))
+    split = tmp_path / "split"
+    (split / "P-1").mkdir(parents=True)
+    (split / "split.json").write_text(
+        json.dumps({"split": "t", "today": "2026-10-22", "manifest_sha256": "0" * 64}), encoding="utf-8"
+    )
+    for doc_type, img in images().items():
+        cv2.imwrite(str(split / "P-1" / f"{doc_type}.png"), img)
+    runs = tmp_path / "runs"
+
+    def go():
+        values = base_values()
+        vlm, ocr = FakeVlm(values), FakeOcr(values, runtime.catalog)
+        return run_split(split, runs, runtime=runtime, vlm=vlm, ocr=ocr, progress=lambda _: None)
+
+    assert go()["new_traces"] == 1
+    assert go()["new_traces"] == 0  # resumed: the same configuration's trace is kept
+    trace = runs / "P-1.json"
+    data = json.loads(trace.read_text(encoding="utf-8"))
+    data["fingerprint"]["reading_code_sha256"] = "0" * 64  # made by other code
+    trace.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ValueError, match="new --run directory"):
+        go()
