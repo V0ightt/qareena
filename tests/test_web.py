@@ -220,6 +220,25 @@ def test_workbench_offers_the_ocr_reading_when_the_readers_disagree(tmp_path):
         assert "الجبوري" in page  # the OCR's reading, offered as one click
 
 
+def test_workbench_shows_what_the_vlm_read_when_the_ocr_consensus_replaced_it(tmp_path):
+    runtime = load_runtime(Settings(_env_file=None, data_dir=tmp_path))
+    certify(runtime)
+    read, printed = base_values(), base_values()
+    read["tax_card"]["taxpayer_name"] = "علي عبدالله حسن الجبوري"
+
+    def make_pipeline():
+        return Pipeline(runtime, FakeVlm(read), FakeOcr(printed, runtime.catalog), today=TODAY)
+
+    with TestClient(create_app(runtime, make_pipeline, reviewer_password=PASSWORD)) as client:
+        case_id = upload(client).headers["location"].rsplit("/", 1)[1]
+        wait_done(client, case_id)
+        page = client.get(f"/review/{case_id}", headers=AUTH).text
+        assert "القارئ الأول قرأ" in page  # shown even though the field was accepted
+        assert "علي عبدالله حسن الجبوري" in page
+        assert "متطابقة حرفياً على الوثيقتين" in page
+        assert "اسم صاحب النشاط بقراءة القارئ الثاني" in page
+
+
 def test_submissions_are_rate_limited_per_address(setup, monkeypatch):
     client, _, _ = setup
     import qareena.web.app as web

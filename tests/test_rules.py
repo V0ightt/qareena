@@ -10,6 +10,7 @@ from qareena.pipeline.rules import (
     cross_document,
     make_record,
     national_card_rules,
+    owner_name_consensus,
     validity_rules,
 )
 
@@ -74,7 +75,8 @@ def base_values():
     }
 
 
-def build(values, grounded=True):
+def build(values, grounded=True, ocr_text=None):
+    """``ocr_text``: (doc_type, field) -> what the OCR read at that field's label."""
     reads = {}
     for doc_type, fields in values.items():
         d = DocumentRead(doc_type=doc_type, image_id=doc_type)
@@ -82,15 +84,17 @@ def build(values, grounded=True):
             rec = make_record(doc_type, f, raw, RT.catalog)
             if grounded and raw is not None:
                 rec.evidence.ocr_matches, rec.evidence.ocr_similarity = 1, 1.0
+            rec.evidence.ocr_text = (ocr_text or {}).get((doc_type, f))
             d.fields[f] = rec
         reads[doc_type] = d
     for d in reads.values():
         apply_field_rules(d, RT.catalog)
+    consensus = owner_name_consensus(reads, RT.catalog)
     national_card_rules(reads.get("iq_national_card_front"), reads.get("iq_national_card_back"), TODAY)
     for k in ("chamber_of_commerce_id", "tax_card"):
         validity_rules(reads.get(k), TODAY)
     checks = cross_document(reads, RT.policy)
-    return reads, checks
+    return reads, ([consensus] if consensus else []) + checks
 
 
 def blocking(reads):
@@ -211,3 +215,66 @@ def test_ungrounded_values_get_no_ocr_source():
     rec = reads["iq_national_card_front"].fields["mother_name"]
     assert "NOT_GROUNDED" in rec.reasons
     assert Source.OCR not in rec.sources
+
+
+# --- owner's full name: OCR consensus (ADR-018) ---------------------------------------
+
+OWNER = "علي عبدالله حسين الجبوري"
+MEMBER, TAXPAYER = ("chamber_of_commerce_id", "member_name"), ("tax_card", "taxpayer_name")
+
+
+def with_names(member, taxpayer):
+    v = base_values()
+    v[MEMBER[0]][MEMBER[1]], v[TAXPAYER[0]][TAXPAYER[1]] = member, taxpayer
+    return v
+
+
+def test_ocr_consensus_replaces_a_misread_owner_name_and_keeps_the_vlm_reading():
+    misread = "علي عبدالله حسن الجبوري"  # the VLM dropped a letter on one card
+    reads, checks = build(with_names(misread, OWNER), ocr_text={MEMBER: OWNER, TAXPAYER: OWNER})
+    member = reads[MEMBER[0]].fields[MEMBER[1]]
+    assert (member.raw, member.value, member.evidence.vlm_raw) == (OWNER, OWNER, misread)
+    assert member.evidence.first_raw == misread  # ablation A still scores the VLM's own answer
+    assert "NOTE_OCR_CONSENSUS" in member.reasons
+    assert not member.blocking
+    assert Source.OCR_CONSENSUS in member.sources
+    assert Source.OCR not in member.sources  # this card's OCR is where the value came from
+    assert member.evidence.lp_min is None  # the VLM's logprobs were about its own answer
+    # the cross-document rules then check the adopted name against the ID card
+    assert Source.CROSS_DOC in member.sources
+    assert ("OWNER_NAME", "CONFLICT") not in {(c.rule, c.result) for c in checks}
+    taxpayer = reads[TAXPAYER[0]].fields[TAXPAYER[1]]
+    assert Source.OCR_CONSENSUS in taxpayer.sources
+    assert taxpayer.evidence.vlm_raw is None
+    consensus = next(c for c in checks if c.rule == "OWNER_NAME_OCR")
+    assert consensus.detail["vlm_read"] == {MEMBER[0]: misread}
+    assert consensus.reasons == ["NOTE_OCR_CONSENSUS"]
+
+
+def test_ocr_consensus_never_decides_sound_alike_letters():
+    vlm, ocr = "علي عبدالله گاطع الجبوري", "علي عبدالله قاطع الجبوري"  # گ / ق: the policy asks a person
+    reads, checks = build(with_names(vlm, vlm), ocr_text={MEMBER: ocr, TAXPAYER: ocr})
+    for d, f in (MEMBER, TAXPAYER):
+        rec = reads[d].fields[f]
+        assert rec.value == vlm
+        assert rec.evidence.vlm_raw is None
+        assert Source.OCR_CONSENSUS not in rec.sources
+    assert next(c for c in checks if c.rule == "OWNER_NAME_OCR").reasons == []
+
+
+@pytest.mark.parametrize(
+    ("member_ocr", "taxpayer_ocr", "member_vlm"),
+    [
+        ("علي عبدالله حسين الجبوري", "علي عبدالله حسن الجبوري", "علي عبدالله حسن الجبوري"),  # cards differ
+        ("علي عبدالله", "علي عبدالله", "علي عبدالله حسن"),  # part of a name
+        ("اسم العضو علي عبدالله حسين", "اسم العضو علي عبدالله حسين", "علي عبدالله حسن"),  # label read too
+        (OWNER, OWNER, None),  # the VLM found nothing: the OCR does not fill an empty field
+    ],
+)
+def test_ocr_consensus_needs_one_whole_name_read_the_same_on_both_cards(member_ocr, taxpayer_ocr, member_vlm):
+    ocr = {MEMBER: member_ocr, TAXPAYER: taxpayer_ocr}
+    reads, checks = build(with_names(member_vlm, OWNER), ocr_text=ocr)
+    member = reads[MEMBER[0]].fields[MEMBER[1]]
+    assert member.evidence.vlm_raw is None
+    assert member.raw == member_vlm
+    assert "NOTE_OCR_CONSENSUS" not in {r for c in checks for r in c.reasons}

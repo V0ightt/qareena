@@ -146,6 +146,22 @@ def test_consistent_packet_is_prechecked_once_certified(runtime):
     assert result.fingerprint["policy_sha256"] == runtime.policy_sha256
 
 
+def test_owner_name_misread_by_the_vlm_is_taken_from_the_ocr_when_both_cards_agree(runtime):
+    certify(runtime)
+    values, printed = base_values(), base_values()
+    values["chamber_of_commerce_id"]["member_name"] = "علي عبدالله حسن الجبوري"
+    result, vlm = run(runtime, values, printed=printed)
+    member = result.documents["chamber_of_commerce_id"].fields["member_name"]
+    assert member.value == printed["chamber_of_commerce_id"]["member_name"]
+    assert member.evidence.vlm_raw == "علي عبدالله حسن الجبوري"
+    assert member.evidence.box is not None
+    assert member.evidence.ocr_score is not None
+    assert member.band == Band.ACCEPT
+    assert result.cross_checks[0].rule == "OWNER_NAME_OCR"
+    assert result.outcome == Outcome.PRE_CHECKED, result.reasons
+    assert "chamber_of_commerce_id.member_name" not in vlm.calls  # nothing left for the evidence loop
+
+
 def test_certificate_for_another_policy_is_ignored(runtime):
     certify(runtime)
     path = certificate_path(runtime)
@@ -308,12 +324,24 @@ def test_arabic_read_backwards_gets_a_crop_reread(runtime):
 def test_arabic_still_backwards_after_the_reread_is_blocked(runtime):
     certify(runtime)
     read = base_values()
-    read["tax_card"]["taxpayer_name"] = _backwards(read["tax_card"]["taxpayer_name"])
-    result, _ = run(runtime, values=read, printed=base_values(), crop={("tax_card", "taxpayer_name"): None})
-    rec = result.documents["tax_card"].fields["taxpayer_name"]
+    read["tax_card"]["trade_name"] = _backwards(read["tax_card"]["trade_name"])
+    result, _ = run(runtime, values=read, printed=base_values(), crop={("tax_card", "trade_name"): None})
+    rec = result.documents["tax_card"].fields["trade_name"]
     assert "READ_REVERSED" in rec.reasons
     assert rec.band == Band.REVIEW
     assert result.outcome == Outcome.NEEDS_REVIEW
+
+
+def test_owner_name_still_backwards_is_replaced_when_the_ocr_agrees_on_both_cards(runtime):
+    certify(runtime)
+    read, printed = base_values(), base_values()
+    right = read["tax_card"]["taxpayer_name"]
+    read["tax_card"]["taxpayer_name"] = _backwards(right)
+    result, _ = run(runtime, values=read, printed=printed, crop={("tax_card", "taxpayer_name"): None})
+    rec = result.documents["tax_card"].fields["taxpayer_name"]
+    assert rec.value == right
+    assert rec.evidence.vlm_raw == _backwards(right)
+    assert "READ_REVERSED" not in rec.reasons  # it was about the VLM's answer, which is gone
 
 
 def test_a_looping_answer_is_retried_at_another_size_and_the_system_is_not_degraded(runtime):

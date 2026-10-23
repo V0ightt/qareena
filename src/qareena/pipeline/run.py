@@ -227,6 +227,7 @@ class Pipeline:
             ev.label_box = labels.label_box.get(name)
             claimed = labels.claims.get(name, ())
             ev.ocr_text = " ".join(ocr.lines[j].text for j in claimed) if claimed else None
+            ev.ocr_line_ids = tuple(claimed)
             if name in recovered:
                 ev.first_raw = recovered[name]
                 rec.add_reason("NOTE_RECOVERED_FROM_CROP")
@@ -382,10 +383,13 @@ class Pipeline:
         for doc in reads.values():
             if doc.fields:
                 rules.apply_field_rules(doc, self.rt.catalog)
+        consensus = rules.owner_name_consensus(reads, self.rt.catalog)
         rules.national_card_rules(reads.get(rules.FRONT), reads.get(rules.BACK), self.today)
         for k in (rules.CHAMBER, rules.TAX):
             rules.validity_rules(reads.get(k), self.today)
         checks = rules.cross_document({k: v for k, v in reads.items() if v.fields}, self.rt.policy)
+        if consensus is not None:
+            checks.insert(0, consensus)
         actions: list[dict] = []
         if self.rt.settings.features.evidence_loop:
             loop_cfg = self.rt.policy.evidence_loop

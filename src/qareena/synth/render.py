@@ -34,6 +34,7 @@ TEMPLATES = HERE / "templates"
 FONTS = HERE / "fonts"
 _ARABIC_DIGITS = str.maketrans("0123456789", "".join(chr(0x0660 + i) for i in range(10)))
 _REQUIRED_FONTS = ("Naskh", "Amiri", "PlexAr", "Mono")
+RENDER_ATTEMPTS = 3
 
 STYLES: dict[str, dict[str, str]] = {
     "ink_blue": {
@@ -230,6 +231,18 @@ class Renderer:
         self._pw.stop()
 
     def render(self, template: str, values: dict[str, Any], out: Path, style: str = "ink_blue") -> Rendered:
+        """Rendering is deterministic, so a browser timeout (a busy machine) is simply retried."""
+        from playwright.sync_api import TimeoutError as BrowserTimeout
+
+        for attempt in range(RENDER_ATTEMPTS):
+            try:
+                return self._render(template, values, out, style)
+            except BrowserTimeout:
+                if attempt == RENDER_ATTEMPTS - 1:
+                    raise
+        raise AssertionError("unreachable")
+
+    def _render(self, template: str, values: dict[str, Any], out: Path, style: str) -> Rendered:
         st = STYLES[style]
         html = self._env.get_template(f"{template}.html.j2").render(v=values, style=st)
         page = self._page

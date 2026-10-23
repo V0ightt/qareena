@@ -38,7 +38,8 @@
         {% endif %}
         <div class="field-value" dir="auto">{{ rec.raw if rec.raw is not none else "—" }}</div>
         {% if rec.reasons %}<ul class="field-reasons">{% for r in rec.reasons %}<li class="{{ 'note' if r.startswith('NOTE_') else '' }}">{{ text.reason(r) }}</li>{% endfor %}</ul>{% endif %}
-        {% if rec.sources %}<p class="sources">مصادر مطابقة: {% for s in rec.sources %}<span>{{ {"ocr": "القارئ الثاني", "ocr_unanchored": "القارئ الثاني (بدون موضع)", "mrz": "السطر الآلي", "cross_doc": "وثيقة أخرى", "reread": "قراءة مكبّرة"}.get(s, s) }}</span>{% endfor %}</p>{% endif %}
+        {% if rec.sources %}<p class="sources">مصادر مطابقة: {% for s in rec.sources %}<span>{{ {"ocr": "القارئ الثاني", "ocr_unanchored": "القارئ الثاني (بدون موضع)", "mrz": "السطر الآلي", "cross_doc": "وثيقة أخرى", "ocr_consensus": "القارئ الثاني على الوثيقتين", "reread": "قراءة مكبّرة"}.get(s, s) }}</span>{% endfor %}</p>{% endif %}
+        {% if rec.evidence.vlm_raw and rec.evidence.vlm_raw != rec.raw %}<p class="sources">القارئ الأول قرأ: <bdi class="ocr-text">{{ rec.evidence.vlm_raw }}</bdi></p>{% endif %}
         {% if f.decision %}
           <p class="decided-note">✔ {{ "تم التأكيد" if f.decision.action == "confirm" else "تم التصحيح إلى: " ~ f.decision.value }}{% if f.decision.note %} · {{ f.decision.note }}{% endif %}</p>
         {% elif f.flagged and not final %}
@@ -50,6 +51,14 @@
               <input type="hidden" name="note" value="اعتماد قراءة القارئ الثاني بعد مطابقتها بالمقطع">
               <span>القارئ الثاني قرأ: <bdi class="ocr-text">{{ rec.evidence.ocr_text }}</bdi></span>
               <button type="submit">اعتماد هذه القراءة</button>
+            </form>
+            {% endif %}
+            {% if rec.evidence.vlm_raw and rec.evidence.vlm_raw != rec.raw %}
+            <form method="post" action="/review/{{ case.id }}/field" class="suggest">
+              <input type="hidden" name="doc_type" value="{{ d.type }}"><input type="hidden" name="field_name" value="{{ f.name }}">
+              <input type="hidden" name="action" value="edit"><input type="hidden" name="value" value="{{ rec.evidence.vlm_raw }}">
+              <input type="hidden" name="note" value="اعتماد قراءة القارئ الأول بعد مطابقتها بالمقطع">
+              <button type="submit">اعتماد قراءة القارئ الأول</button>
             </form>
             {% endif %}
             <form method="post" action="/review/{{ case.id }}/field">
@@ -86,7 +95,7 @@
 {% if cross_checks %}
 <section class="cross">
   <h2>المطابقة بين الوثائق</h2>
-  <ul>{% for c in cross_checks %}<li class="cc-{{ c.result|lower }}"><strong>{{ {"OWNER_NAME": "اسم صاحب النشاط", "TRADE_NAME": "الاسم التجاري"}.get(c.rule, c.rule) }}</strong>: {{ text.CROSS_RESULT.get(c.result, c.result) }}{% for r in c.reasons if not r.endswith("_" ~ c.result) %} · {{ text.reason(r) }}{% endfor %}</li>{% endfor %}</ul>
+  <ul>{% for c in cross_checks %}<li class="cc-{{ c.result|lower }}"><strong>{{ {"OWNER_NAME": "اسم صاحب النشاط", "OWNER_NAME_OCR": "اسم صاحب النشاط بقراءة القارئ الثاني", "TRADE_NAME": "الاسم التجاري"}.get(c.rule, c.rule) }}</strong>: {{ text.CROSS_RESULT.get(c.result, c.result) }}{% for r in c.reasons if not r.endswith("_" ~ c.result) %} · {{ text.reason(r) }}{% endfor %}</li>{% endfor %}</ul>
 </section>
 {% endif %}
 

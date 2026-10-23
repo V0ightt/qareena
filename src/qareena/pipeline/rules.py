@@ -3,6 +3,9 @@
 Rules never accept a field. They add reason codes (blocking ones force human review) and
 record which *independent sources* agree with the VLM's reading. A critical field may only be
 accepted later if at least one such source exists (ADR-004: two agreeing sources).
+
+One rule may replace a value: the owner's full name, where the OCR read it letter for letter
+the same on both business cards and the VLM read otherwise (ADR-018).
 """
 
 from __future__ import annotations
@@ -15,12 +18,14 @@ from qareena.checks.mrz import read_td1
 from qareena.config import Catalog, FieldKind, Policy
 from qareena.eval.compare import canonical
 from qareena.pipeline.records import CrossCheck, DocumentRead, FieldRecord, Source
-from qareena.text import names
+from qareena.text import arabic, names
 from qareena.text.names import Match
 
 FRONT, BACK = "iq_national_card_front", "iq_national_card_back"
 CHAMBER, TAX = "chamber_of_commerce_id", "tax_card"
 ID_NAME_PARTS = ("given_name", "father_name", "grandfather_name", "laqab")
+FULL_NAMES = ((CHAMBER, "member_name"), (TAX, "taxpayer_name"))
+MIN_NAME_PARTS = 3  # given, father, grandfather: an OCR reading with fewer saw only part of the name
 OCR_EXACT = 0.95
 CARD_VALIDITY_YEARS = 10
 VALIDITY_TOLERANCE_DAYS = 3
@@ -147,6 +152,76 @@ def validity_rules(doc: DocumentRead | None, today: dt.date) -> None:
         doc.fields["issue_date"].add_reason("DATE_IN_FUTURE", blocking=True)
     if issue is not None and valid_until is not None and valid_until < issue:
         doc.fields["valid_until"].add_reason("DATE_ORDER", blocking=True)
+
+
+# --- owner's full name: OCR consensus (ADR-018) ---------------------------------------
+
+
+def owner_name_consensus(reads: Mapping[str, DocumentRead], catalog: Catalog) -> CrossCheck | None:
+    """Where the OCR read the owner's full name letter for letter the same on both business
+    cards, take that reading over a VLM reading that differs. Run it before the cross-document
+    rules: they then check the adopted name against the ID card as they would the VLM's.
+
+    The cards are photographed separately, so two identical readings are strong evidence: on
+    dev + calib they were right in 128 of 130 fields, and fixed 42 VLM misreadings without
+    breaking a correct one. The VLM's answer stays in the evidence for the reviewer. A field
+    the VLM left empty is not filled, and a difference only in sound-alike letters (گ/ق/ك) is
+    not decided here: the policy leaves that question to a person.
+    """
+    recs = [reads[d].fields[f] for d, f in FULL_NAMES if d in reads and f in reads[d].fields]
+    texts = [r.evidence.ocr_text for r in recs if r.evidence.ocr_text is not None]
+    if len(texts) < len(FULL_NAMES):
+        return None
+    spec = catalog.field(*FULL_NAMES[0])
+    name = canonical(texts[0], spec)
+    if name is None or canonical(texts[1], spec) != name or len(names.tokens(name)) < MIN_NAME_PARTS:
+        return None
+    labels = catalog.printed_labels()
+    if any(label_echo(t, labels) or garbled(t) or format_error(t, spec) for t in texts):
+        return None
+    adopted: dict[str, str | None] = {}
+    for (doc_type, field), rec in zip(FULL_NAMES, recs, strict=True):
+        if rec.value == name:
+            rec.add_source(Source.OCR_CONSENSUS)
+        elif rec.value is not None and not _sound_alike_only(rec.value, name):
+            reads[doc_type].fields[field] = _adopt(rec, reads[doc_type], catalog)
+            adopted[doc_type] = rec.raw
+    return CrossCheck(
+        rule="OWNER_NAME_OCR",
+        members=list(FULL_NAMES),
+        result="SAME",
+        reasons=["NOTE_OCR_CONSENSUS"] if adopted else [],
+        detail={"value": name, "vlm_read": adopted},
+    )
+
+
+def _sound_alike_only(a: str, b: str) -> bool:
+    folded = [arabic.spelling(t).replace(" ", "") for t in (a, b)]
+    return folded[0] != folded[1] and arabic.sound(folded[0]) == arabic.sound(folded[1])
+
+
+def _adopt(old: FieldRecord, doc: DocumentRead, catalog: Catalog) -> FieldRecord:
+    """A fresh record of the OCR's reading: the VLM's reasons and logprobs were about its own answer."""
+    ev_old = old.evidence
+    rec = make_record(old.doc_type, old.field, ev_old.ocr_text, catalog)
+    ev = rec.evidence
+    ev.label_box, ev.ocr_text, ev.ocr_line_ids = ev_old.label_box, ev_old.ocr_text, ev_old.ocr_line_ids
+    ev.ocr_matches, ev.ocr_similarity, ev.ocr_anchored = 1, 1.0, True
+    lines = [doc.ocr_lines[j] for j in ev_old.ocr_line_ids if j < len(doc.ocr_lines)]
+    if lines:
+        boxes = [ln["box"] for ln in lines]
+        ev.box = (
+            min(b[0] for b in boxes),
+            min(b[1] for b in boxes),
+            max(b[2] for b in boxes),
+            max(b[3] for b in boxes),
+        )
+        ev.ocr_score = min(ln["score"] for ln in lines)
+    ev.vlm_raw = old.raw
+    ev.first_raw = ev_old.first_raw if ev_old.first_raw is not None else old.raw
+    rec.add_source(Source.OCR_CONSENSUS)  # not Source.OCR: this doc's OCR is where the value came from
+    rec.add_reason("NOTE_OCR_CONSENSUS")
+    return rec
 
 
 # --- cross-document --------------------------------------------------------------------

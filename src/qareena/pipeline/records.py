@@ -26,12 +26,13 @@ class Outcome(StrEnum):
 
 
 class Source(StrEnum):
-    """Independent evidence that agrees with the VLM's reading of a field."""
+    """Evidence that agrees with a field's value, apart from the reading the value came from."""
 
     OCR = "ocr"  # the OCR engine read the same value at this field's printed label
     OCR_UNANCHORED = "ocr_unanchored"  # ... somewhere unclaimed, but the label was not found: a signal only
     MRZ = "mrz"  # the machine-readable zone (check digits valid) carries the same value
     CROSS_DOC = "cross_doc"  # another document carries the same value
+    OCR_CONSENSUS = "ocr_consensus"  # the OCR read this exact name at its label on both business cards
     REREAD = "reread"  # a zoomed re-read of the field's crop returned the same value
 
 
@@ -44,7 +45,9 @@ class Evidence(BaseModel):
     box: tuple[float, float, float, float] | None = None  # pixels on the read image
     label_box: tuple[float, float, float, float] | None = None  # the field's printed label, if found
     ocr_text: str | None = None  # what the OCR read at this field's label (shown to the reviewer)
-    first_raw: str | None = None  # the full-page answer, when a crop re-read replaced it
+    ocr_line_ids: tuple[int, ...] = ()  # ... as indices into the document's ocr_lines
+    first_raw: str | None = None  # the VLM's full-page answer, when a crop re-read or the OCR replaced it
+    vlm_raw: str | None = None  # the VLM's answer, when the OCR consensus replaced it (ADR-018)
     lp_min: float | None = None
     lp_mean: float | None = None
     lp_tokens: int = 0
@@ -53,7 +56,7 @@ class Evidence(BaseModel):
 class FieldRecord(BaseModel):
     doc_type: str
     field: str
-    raw: str | None  # exactly what the VLM returned
+    raw: str | None  # exactly the text read: the VLM's, or the OCR's where its consensus was adopted
     value: str | None  # canonical value used by rules (None = treated as unreadable)
     critical: bool = False
     required: bool = False

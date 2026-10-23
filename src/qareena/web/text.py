@@ -94,6 +94,7 @@ REASON: dict[str, str] = {
     "CROSS_CHECK_INCOMPLETE": "مطابقة بين الوثائق غير مكتملة",
     "NOTE_MRZ_REPAIRED": "صُحّحت قراءة السطر الآلي وأكدتها أرقام التحقق",
     "NOTE_RECOVERED_FROM_CROP": "أُعيدت القراءة من صورة مكبّرة للحقل",
+    "NOTE_OCR_CONSENSUS": "اعتُمدت قراءة القارئ الثاني: متطابقة حرفياً على الوثيقتين، والقارئ الأول قرأ غيرها",
     "NAME_MISSING_LAQAB": "اللقب غير موجود في إحدى الوثائق",
     "NAME_MISSING_GRANDFATHER": "اسم الجد غير موجود في إحدى الوثائق",
     "NOTE_MISSING_LAQAB": "اللقب غير مذكور في إحدى الوثائق (مقبول)",

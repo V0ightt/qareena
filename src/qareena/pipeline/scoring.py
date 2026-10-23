@@ -20,7 +20,7 @@ from qareena.pipeline.records import Band, FieldRecord, Source
 from qareena.text import arabic
 
 # Evidence that does not come from the VLM itself. A same-model re-read is a signal, not a source.
-INDEPENDENT = frozenset({Source.OCR, Source.MRZ, Source.CROSS_DOC})
+INDEPENDENT = frozenset({Source.OCR, Source.MRZ, Source.CROSS_DOC, Source.OCR_CONSENSUS})
 
 KINDS = (
     FieldKind.NAME_PART,
@@ -56,6 +56,7 @@ FEATURES = (
     "ocr_score",
     "src_mrz",
     "src_cross_doc",
+    "src_ocr_consensus",  # with lp_missing and no src_ocr: the value was adopted from the OCR
     "src_reread",
     "n_independent",
     "n_caution",
@@ -91,6 +92,7 @@ def features(rec: FieldRecord, kind: FieldKind) -> list[float]:
         ev.ocr_score or 0.0,
         mrz,
         cross,
+        float(Source.OCR_CONSENSUS in rec.sources),
         float(Source.REREAD in rec.sources),
         float(len({s for s in rec.sources if s in INDEPENDENT})),
         float(len(caution)),
@@ -139,6 +141,7 @@ _HAND_SET = {  # plausible ordering for display while no certificate exists; nev
     "ocr_exact": 1.0,
     "src_mrz": 1.5,
     "src_cross_doc": 1.0,
+    "src_ocr_consensus": 1.0,
     "n_caution": -1.5,
     "recovered": -0.5,
 }
