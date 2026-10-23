@@ -139,8 +139,22 @@ def test_report_renders_every_section():
     s = metrics.summarize(rows, packets, weights=w, taus=(None, None))
     s["ablations"] = metrics.ablations(rows, w)
     text = metrics.markdown(s, "test")
-    for heading in ("## Reading", "## Accepted automatically", "## Packets", "## What each part buys"):
+    headings = ("## Reading", "## Accepted", "## Owner names", "## Packets", "## What each part buys")
+    for heading in headings:
         assert heading in text
+
+
+def test_adopted_owner_names_are_counted_against_the_vlms_first_answer():
+    from dataclasses import replace
+
+    def adopted(correct, first_correct):
+        return replace(row(correct, 0), reasons=("NOTE_OCR_CONSENSUS",), first_correct=first_correct)
+
+    rows = [adopted(True, False), adopted(True, True), adopted(False, True), row(True, 1)]
+    s = metrics.summarize(rows, [], weights=[0.0] * len(FEATURES), taus=(None, None))["ocr_consensus"]
+    assert (s["right"]["k"], s["right"]["n"]) == (2, 3)
+    assert (s["fixed"], s["broke"]) == (1, 1)
+    assert s["accepted"]["n"] == 0  # nothing is accepted without a certified threshold
 
 
 @pytest.mark.parametrize(("code", "degrees"), [(0, 90), (1, 180), (2, 270)])

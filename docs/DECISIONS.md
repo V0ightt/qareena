@@ -51,6 +51,7 @@ The format follows lightweight Architecture Decision Records. New decisions are 
     - VLM ↔ OCR, plus agreement on a zoomed re-read (membership number, tax ID)
   - The calibrated threshold for critical fields is certified separately and more strictly than for other fields.
   - Errors in non-critical fields (for example blood type or place of birth) are reported, but they never block a pass on their own.
+- *Amended 23 Oct:* the owner's full name has one more source: the OCR reading it letter for letter the same on both business cards (ADR-018).
 - **Revisit if** ZainCash's reviewers name a different set of fields as decisive (interview, week 1).
 
 ## ADR-005 · Threshold by fixed-sequence testing with Clopper–Pearson bounds
@@ -194,3 +195,22 @@ The format follows lightweight Architecture Decision Records. New decisions are 
   - A looping or unparseable answer gets one retry at the other size.
   - Because size changes the readings, it lives in the content-hashed policy: changing it voids the certificate (ADR-013).
 - **Rejected.** Choosing size per layout (the layout is unknown at read time), and a prompt sentence about RTL order (no measurable effect).
+
+## ADR-018 · The owner's full name may come from the OCR, when both business cards agree letter for letter
+- **Context.** On calib, no packet would have been pre-checked: a typical packet still had 5–6 critical fields open, most often the full names (taxpayer_name 45 packets, member_name 40). The VLM drops or swaps letters in long names (ليت for ليث, التيمي for التميمي, ى for ي) at every input size, so its reading cannot be confirmed and a reviewer retypes it.
+- **Measurement** (dev + calib traces, 162 packets with both names read, before the rule existed):
+  - The OCR's text at the two name labels was identical, letter for letter, in 65 packets (130 fields). It was right in 128 of the 130.
+  - The VLM read otherwise in 44 of those fields. Taking the OCR's reading fixes 42 and breaks none; the other 2 were wrong either way (calib-0011: the OCR read گاطع as كاطع on both cards, and the VLM read كاظم).
+  - No agreement occurred in any of the 35 packets whose cards carry a planted name difference.
+- **Decision** (`rules.owner_name_consensus`, approved by the project owner on 23 Oct because it is the first rule that replaces a value):
+  - Where the OCR read the owner's full name identically at its label on the chamber card and on the tax card, and the VLM read otherwise, the OCR's reading becomes the value. The VLM's answer is kept (`evidence.vlm_raw`), shown in the workbench with a one-click way back, and the field is marked `NOTE_OCR_CONSENSUS`.
+  - Not when the VLM left the field empty; not when the only difference is sound-alike letters (گ/ق/ك, چ/ج), because the policy leaves those to a person; not for fewer than three name parts, a label echo, garbled text or a format error.
+  - The adopted value gets a new independent source, `OCR_CONSENSUS`, and not `OCR`: on its own card the OCR is where the value came from, so counting it again would be circular. A VLM reading that equals the agreed text gets `OCR_CONSENSUS` too.
+  - The rule runs before the cross-document rules, which then check the adopted name against the ID card exactly as they would the VLM's.
+  - The scorer gets one feature, `src_ocr_consensus`, so the certified scorer decides how far to trust it; with no logprobs and no own-card OCR source, an adopted value looks different to the scorer from a confirmed VLM reading.
+- **Risk, stated plainly.** If the OCR misread one card into the other card's spelling, a real difference between the cards would be hidden. Against it: the sound-alike guard, the ID-card cross-check (a conflict with the ID still blocks), and certification on `calib2`, which counts planted-defect escapes. The report lists adopted names separately.
+- **Rejected.**
+  - Asking the VLM to verify the OCR's candidate: it said yes to 12 of 226 right candidates and 11 of 388 wrong ones, so no signal.
+  - Supporting names token by token across documents: about 10% wrong.
+  - Adopting only differences beyond the spelling layer: it would give up 21 of the 42 fixes, for no measured gain.
+- **Revisit if** an adopted name is wrong on `calib2` or a test split, or a planted difference escapes through it.

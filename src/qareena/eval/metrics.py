@@ -254,6 +254,7 @@ def summarize(
             sum(r.iou is not None and r.iou >= 0.5 for r in acc), sum(r.iou is not None for r in acc)
         ),
         "calibration": _calibration([r for r in valued if r.eligible], weights),
+        "ocr_consensus": _consensus(valued, weights, taus),
         "packets_outcome": _outcomes(packets),
         "quality_gate": _gate(packets),
         "latency_s": _latency(packets),
@@ -279,6 +280,20 @@ def _calibration(rows: list[FieldRow], weights: Sequence[float], bins: int = 10)
         if len(chunk):
             ece += len(chunk) / len(rows) * abs(float(p[chunk].mean()) - float(y[chunk].mean()))
     return {"n": len(rows), "ece_adaptive": round(ece, 4), "brier": round(float(np.mean((p - y) ** 2)), 4)}
+
+
+def _consensus(
+    valued: list[FieldRow], weights: Sequence[float], taus: tuple[float | None, float | None]
+) -> dict[str, Any]:
+    """Owner names taken from the OCR's agreeing readings (ADR-018), against the VLM's first answer."""
+    adopted = [r for r in valued if "NOTE_OCR_CONSENSUS" in r.reasons]
+    acc = [r for r in adopted if accepted(r, weights, taus)]
+    return {
+        "right": rate(sum(r.correct for r in adopted), len(adopted)),
+        "fixed": sum(r.correct and not r.first_correct for r in adopted),
+        "broke": sum(r.first_correct and not r.correct for r in adopted),
+        "accepted": bound(sum(not r.correct for r in acc), len(acc)),
+    }
 
 
 def _outcomes(packets: list[PacketRow]) -> dict[str, Any]:
@@ -383,6 +398,7 @@ def markdown(summary: dict[str, Any], title: str) -> str:
         return "–" if x["n"] == 0 else f"{x['errors']}/{x['n']} (95% upper bound {100 * x['upper95']:.2f}%)"
 
     rd, acc, cal = summary["reading"], summary["accepted"], summary["calibration"]
+    cons = summary["ocr_consensus"]
     lines = [
         f"# {title}",
         "",
@@ -410,6 +426,14 @@ def markdown(summary: dict[str, Any], title: str) -> str:
         f"| Coverage (accepted ÷ legible) | {r(acc['coverage'])} |",
         f"| Evidence box IoU ≥ 0.5 (accepted) | {r(summary['evidence_box_iou50'])} |",
         f"| Calibration (adaptive ECE · Brier) | {cal.get('ece_adaptive')} · {cal.get('brier')} |",
+        "",
+        "## Owner names taken from the OCR (ADR-018)",
+        "",
+        "| | |",
+        "|---|---|",
+        f"| Right, of those adopted | {r(cons['right'])} |",
+        f"| VLM's first answer wrong → fixed · right → broken | {cons['fixed']} · {cons['broke']} |",
+        f"| Errors among adopted names accepted | {b(cons['accepted'])} |",
         "",
         "## Packets",
         "",

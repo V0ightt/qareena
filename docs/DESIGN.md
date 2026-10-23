@@ -257,6 +257,7 @@ The two targets must be consistent with each other. If each of 20 accepted field
 - **Front ↔ MRZ.** Covers ID number, date of birth and expiry, and the MRZ carries ICAO check digits.
 - **ID ↔ license ↔ tax card.** Covers names and trade name.
 - **VLM ↔ OCR at the field's own label (ADR-015).** For fields that appear only once, such as membership number and tax ID. An OCR match elsewhere on the page does not count: it is how a field shift (the grandfather's name returned as the father's) would get confirmed. A zoomed re-read by the same VLM is a scorer signal, never the second source.
+- **OCR ↔ OCR across the two business cards (ADR-018).** For the owner's full name only: where the OCR read it letter for letter the same at its label on the chamber card and the tax card, that reading is the value, even if the VLM read otherwise. The VLM's answer is kept for the reviewer, and the adopted name is still checked against the ID card. This is the one rule that replaces a value.
 
 The MRZ name line is Latin script, and Iraqi transliteration is not standardised. It is shown as a hint, never used as a decisive cross-check.
 
