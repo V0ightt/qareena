@@ -60,7 +60,15 @@ def fit_logistic(rows: Sequence[FieldRow], l2: float = 1.0) -> tuple[float, ...]
 def check_same_configuration(run_fingerprint: dict[str, Any], runtime: Runtime) -> None:
     """Refuse to certify traces made by another policy, model, decision code or flag set."""
     current = runtime.fingerprint
-    keys = ("policy_sha256", "catalog_sha256", "code_sha256", "vlm_model", "features")
+    # the scorer may differ: traces are scored afresh. What produced the readings may not.
+    keys = (
+        "policy_sha256",
+        "catalog_sha256",
+        "reading_code_sha256",
+        "independent_sources",
+        "vlm_model",
+        "features",
+    )
     differ = [k for k in keys if run_fingerprint.get(k) != current.get(k)]
     if differ:
         raise ValueError(
@@ -93,7 +101,8 @@ def certify(rows: Sequence[FieldRow], weights: Sequence[float], runtime: Runtime
     certificate = {
         "policy_sha256": runtime.policy_sha256,
         "vlm_model": runtime.settings.vlm_model,
-        "code_sha256": runtime.code_sha256,
+        "reading_code_sha256": runtime.reading_code_sha256,
+        "scoring_sha256": runtime.scoring_sha256,
         "feature_flags": runtime.settings.features.model_dump(),
         "features": list(FEATURES),
         "weights": list(weights),

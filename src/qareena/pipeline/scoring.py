@@ -21,24 +21,48 @@ from qareena.pipeline.records import Band, FieldRecord, Source
 # Evidence that does not come from the VLM itself. A same-model re-read is a signal, not a source.
 INDEPENDENT = frozenset({Source.OCR, Source.MRZ, Source.CROSS_DOC})
 
+KINDS = (
+    FieldKind.NAME_PART,
+    FieldKind.FULL_NAME,
+    FieldKind.DIGITS,
+    FieldKind.CODE,
+    FieldKind.MRZ_LINE,
+    FieldKind.DATE,
+    FieldKind.TEXT,
+    FieldKind.ENUM,
+)
+# An exact OCR match at the field's own label means different things per kind: near proof for
+# a 10-digit number, weaker for a name (the readers can share a misreading of similar glyphs).
+EXACT_BY_KIND = (
+    FieldKind.NAME_PART,
+    FieldKind.FULL_NAME,
+    FieldKind.DIGITS,
+    FieldKind.CODE,
+    FieldKind.DATE,
+    FieldKind.TEXT,
+    FieldKind.ENUM,
+)
 FEATURES = (
     "bias",
     "lp_min",
     "lp_mean",
+    "lp_missing",
     "src_ocr",  # anchored at the field's own label
     "ocr_unanchored",
     "ocr_ambiguous",
-    "ocr_similarity",
+    "ocr_exact",  # anchored and verbatim (after folding)
     "ocr_score",
     "src_mrz",
     "src_cross_doc",
     "src_reread",
+    "n_independent",
     "n_caution",
     "recovered",
-    "kind_name",
-    "kind_number",
-    "kind_date",
-    "kind_text",
+    "value_len",
+    *(f"kind_{k.value}" for k in KINDS),
+    *(f"ocr_exact_x_{k.value}" for k in EXACT_BY_KIND),
+    "mrz_x_digits",
+    "cross_doc_x_name_part",
 )
 NAME_KINDS = {FieldKind.NAME_PART, FieldKind.FULL_NAME}
 NUMBER_KINDS = {FieldKind.DIGITS, FieldKind.CODE, FieldKind.MRZ_LINE}
@@ -47,24 +71,31 @@ NUMBER_KINDS = {FieldKind.DIGITS, FieldKind.CODE, FieldKind.MRZ_LINE}
 def features(rec: FieldRecord, kind: FieldKind) -> list[float]:
     ev = rec.evidence
     caution = [r for r in rec.reasons if not r.startswith("NOTE_")]
+    anchored = Source.OCR in rec.sources
+    exact = float(anchored and ev.ocr_similarity >= 0.999)
+    mrz = float(Source.MRZ in rec.sources)
+    cross = float(Source.CROSS_DOC in rec.sources)
     return [
         1.0,
-        max(ev.lp_min, -20.0) if ev.lp_min is not None else -5.0,
-        max(ev.lp_mean, -20.0) if ev.lp_mean is not None else -5.0,
-        float(Source.OCR in rec.sources),
+        max(ev.lp_min, -20.0) if ev.lp_min is not None else 0.0,
+        max(ev.lp_mean, -20.0) if ev.lp_mean is not None else 0.0,
+        float(ev.lp_min is None),
+        float(anchored),
         float(Source.OCR_UNANCHORED in rec.sources),
         float(ev.ocr_matches > 1),
-        ev.ocr_similarity,
+        exact,
         ev.ocr_score or 0.0,
-        float(Source.MRZ in rec.sources),
-        float(Source.CROSS_DOC in rec.sources),
+        mrz,
+        cross,
         float(Source.REREAD in rec.sources),
+        float(len({s for s in rec.sources if s in INDEPENDENT})),
         float(len(caution)),
         float("NOTE_RECOVERED_FROM_CROP" in rec.reasons),
-        float(kind in NAME_KINDS),
-        float(kind in NUMBER_KINDS),
-        float(kind == FieldKind.DATE),
-        float(kind in (FieldKind.TEXT, FieldKind.ENUM)),
+        min(len(rec.value or ""), 40) / 20.0,
+        *(float(kind == k) for k in KINDS),
+        *(exact * float(kind == k) for k in EXACT_BY_KIND),
+        mrz * float(kind == FieldKind.DIGITS),
+        cross * float(kind == FieldKind.NAME_PART),
     ]
 
 
@@ -85,16 +116,24 @@ class LogisticScorer:
 
 
 # Hand-set, uncertified weights: plausible ordering for display while no certificate exists.
-PROVISIONAL = LogisticScorer(
-    weights=(-1.0, 0.6, 0.4, 2.0, 0.8, -0.8, 1.5, 1.0, 2.0, 1.5, 1.2, -1.2, -0.5, -0.3, -0.2, 0.0, 0.0),
-    certified=False,
-)
+_HAND_SET = {  # plausible ordering for display while no certificate exists; never accepts
+    "bias": -1.0,
+    "lp_min": 0.3,
+    "src_ocr": 1.5,
+    "ocr_exact": 1.0,
+    "src_mrz": 1.5,
+    "src_cross_doc": 1.0,
+    "n_caution": -1.5,
+    "recovered": -0.5,
+}
+PROVISIONAL = LogisticScorer(weights=tuple(_HAND_SET.get(f, 0.0) for f in FEATURES), certified=False)
 
 
 @dataclass(frozen=True)
 class Certificate:
     """Thresholds certified on held-out calibration data for one exact configuration: policy,
-    model, decision code and feature flags. Change any of them and it no longer applies."""
+    model, reading code, this scorer and the feature flags. Change any of them and it no
+    longer applies."""
 
     policy_sha256: str
     vlm_model: str
@@ -102,7 +141,8 @@ class Certificate:
     tau_critical: float | None
     tau_other: float | None
     report: dict = field(default_factory=dict)
-    code_sha256: str = ""
+    reading_code_sha256: str = ""
+    scoring_sha256: str = ""
     feature_flags: dict = field(default_factory=dict)
 
     @classmethod
@@ -115,7 +155,8 @@ class Certificate:
             d.get("tau_critical"),
             d.get("tau_other"),
             d.get("report", {}) | {"features": d.get("features", list(FEATURES))},
-            d.get("code_sha256", ""),
+            d.get("reading_code_sha256", ""),
+            d.get("scoring_sha256", ""),
             d.get("feature_flags", {}),
         )
 
@@ -125,7 +166,8 @@ class Certificate:
             and self.vlm_model == runtime.settings.vlm_model
             and len(self.weights) == len(FEATURES)
             and self.report.get("features", list(FEATURES)) == list(FEATURES)
-            and self.code_sha256 == runtime.code_sha256
+            and self.reading_code_sha256 == runtime.reading_code_sha256
+            and self.scoring_sha256 == runtime.scoring_sha256
             and self.feature_flags == runtime.settings.features.model_dump()
         )
 

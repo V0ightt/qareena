@@ -286,6 +286,26 @@ class Runtime(BaseModel):
         """
         return decision_code_sha256()
 
+    @cached_property
+    def reading_code_sha256(self) -> str:
+        """The decision code minus the scorer: everything that shapes the readings in a trace.
+
+        A new scorer can be certified on existing calibration traces (they are scored afresh),
+        but only if the code that *produced* them is unchanged.
+        """
+        return decision_code_sha256(exclude=(SCORER_FILE,))
+
+    @cached_property
+    def scoring_sha256(self) -> str:
+        return _file_sha256(PACKAGE_DIR / SCORER_FILE)
+
+    @property
+    def independent_sources(self) -> list[str]:
+        """Which sources count as independent; the evidence loop uses it too, so it is pinned."""
+        from qareena.pipeline.scoring import INDEPENDENT
+
+        return sorted(str(s) for s in INDEPENDENT)
+
     @property
     def fingerprint(self) -> dict[str, Any]:
         """Stamped on every trace and evaluation report so any result can be reproduced."""
@@ -294,6 +314,9 @@ class Runtime(BaseModel):
             "policy_sha256": self.policy_sha256,
             "catalog_sha256": self.catalog_sha256,
             "code_sha256": self.code_sha256,
+            "reading_code_sha256": self.reading_code_sha256,
+            "scoring_sha256": self.scoring_sha256,
+            "independent_sources": self.independent_sources,
             "mode": self.settings.mode,
             "vlm_model": self.settings.vlm_model,
             "ocr_engine": self.settings.ocr_engine,
@@ -303,14 +326,20 @@ class Runtime(BaseModel):
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 DECISION_CODE = ("pipeline", "checks", "readers", "text", "eval/compare.py")
+SCORER_FILE = "pipeline/scoring.py"
 
 
-def decision_code_sha256(root: Path = PACKAGE_DIR) -> str:
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def decision_code_sha256(root: Path = PACKAGE_DIR, exclude: tuple[str, ...] = ()) -> str:
     h = hashlib.sha256()
     files = sorted(
         f
         for part in DECISION_CODE
         for f in ([root / part] if part.endswith(".py") else (root / part).rglob("*.py"))
+        if f.relative_to(root).as_posix() not in exclude
     )
     for f in files:
         h.update(f.relative_to(root).as_posix().encode("utf-8") + b"\0")

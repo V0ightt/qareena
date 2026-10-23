@@ -108,7 +108,8 @@ def certify(runtime, tau=0.5):
             {
                 "policy_sha256": runtime.policy_sha256,
                 "vlm_model": runtime.settings.vlm_model,
-                "code_sha256": runtime.code_sha256,
+                "reading_code_sha256": runtime.reading_code_sha256,
+                "scoring_sha256": runtime.scoring_sha256,
                 "feature_flags": runtime.settings.features.model_dump(),
                 "weights": weights,
                 "tau_critical": tau,
@@ -383,7 +384,11 @@ def test_an_upright_photo_is_left_alone(runtime):
 def test_a_certificate_for_other_code_or_flags_is_ignored(runtime):
     certify(runtime)
     path = certificate_path(runtime)
-    for key, value in (("code_sha256", "0" * 64), ("feature_flags", {"evidence_loop": False})):
+    for key, value in (
+        ("reading_code_sha256", "0" * 64),
+        ("scoring_sha256", "0" * 64),
+        ("feature_flags", {"evidence_loop": False}),
+    ):
         data = json.loads(path.read_text(encoding="utf-8"))
         original = data[key]
         data[key] = value

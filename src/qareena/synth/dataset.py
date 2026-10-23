@@ -58,6 +58,11 @@ SPLITS: dict[str, SplitSpec] = {
     "calib": SplitSpec("calib", 150, ("a", "b"), 2, sealed=False),
     "test_a": SplitSpec("test_a", 30, ("a", "b"), 3, sealed=True),
     "test_b": SplitSpec("test_b", 100, ("a", "b", "c"), 4, sealed=True),
+    # Certification set used after `calib` was opened twice for error analysis (ADR-005 note):
+    # 300 new packets, so the 1% bound has the power to certify a usable threshold. `calib`
+    # becomes training data for the scorer. Listed last: its people are drawn after everyone
+    # else's, so it cannot take a test split's person.
+    "calib2": SplitSpec("calib2", 300, ("a", "b"), 5, sealed=False),
 }
 
 # Roughly 40% consistent packets; every planted defect gets enough cases per split to measure.

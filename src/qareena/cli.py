@@ -271,7 +271,9 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--out", type=Path)
     r.add_argument("--today")
     r.set_defaults(func=_run)
-    splits = ("dev", "calib", "test_a", "test_b")
+    from qareena.synth.dataset import SPLITS
+
+    splits = tuple(SPLITS)
     b = sub.add_parser("build-dataset", help="render, degrade and label one evaluation split")
     b.add_argument("--split", required=True, choices=splits)
     b.add_argument("--packets", type=int, help="override the split size (smoke tests)")

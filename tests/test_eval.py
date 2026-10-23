@@ -159,6 +159,8 @@ def test_unrotate_inverts_the_turn_the_pipeline_made(code, degrees):
 def test_certification_refuses_traces_from_other_code(tmp_path):
     runtime = load_runtime(Settings(_env_file=None, data_dir=tmp_path))
     fit.check_same_configuration(runtime.fingerprint, runtime)  # same configuration: fine
-    other = runtime.fingerprint | {"code_sha256": "0" * 64}
-    with pytest.raises(ValueError, match="code_sha256"):
+    other = runtime.fingerprint | {"reading_code_sha256": "0" * 64}
+    with pytest.raises(ValueError, match="reading_code_sha256"):
         fit.check_same_configuration(other, runtime)
+    # a different scorer is fine: the traces are scored afresh
+    fit.check_same_configuration(runtime.fingerprint | {"scoring_sha256": "0" * 64}, runtime)
